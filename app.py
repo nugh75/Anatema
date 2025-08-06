@@ -108,6 +108,38 @@ def create_app():
         from flask_wtf.csrf import generate_csrf
         return dict(csrf_token=generate_csrf)
     
+    # Filtro personalizzato per escapare JavaScript
+    @app.template_filter('escapejs')
+    def escapejs_filter(text):
+        """
+        Filtra il testo per renderlo sicuro per JavaScript
+        Sostituisce caratteri problematici come apostrofi, virgolette, ecc.
+        """
+        if text is None:
+            return ''
+        
+        # Converti in stringa se non lo è già
+        text = str(text)
+        
+        # Escape dei caratteri speciali per JavaScript
+        replacements = {
+            '\\': '\\\\',
+            "'": "\\'",
+            '"': '\\"',
+            '\n': '\\n',
+            '\r': '\\r',
+            '\t': '\\t',
+            '\b': '\\b',
+            '\f': '\\f',
+            '\v': '\\v',
+            '\0': '\\0'
+        }
+        
+        for old, new in replacements.items():
+            text = text.replace(old, new)
+        
+        return text
+    
     # Creazione delle tabelle del database
     with app.app_context():
         from models import (User, Label, ExcelFile, TextCell, CellAnnotation, 
