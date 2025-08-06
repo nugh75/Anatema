@@ -5,11 +5,16 @@ Routes per le statistiche di annotazione
 from flask import Blueprint, render_template, request, jsonify, flash, redirect, url_for
 from flask_login import login_required, current_user
 from sqlalchemy import func, desc, distinct
-from collections import defaultdict, Counter
+from collections import defaultdict, Counter, namedtuple
 from datetime import datetime, timedelta
 import json
+import traceback
 
-from models import CellAnnotation, Label, User, TextCell, ExcelFile, Category, AnnotationAction, db
+from models import CellAnnotation, Label, User, TextCell, ExcelFile, Category, AnnotationAction, TextDocument, TextAnnotation, db
+
+# Namedtuple per creare oggetti con attributi come quelli restituiti dalle query SQLAlchemy
+UserStat = namedtuple('UserStat', ['username', 'id', 'annotation_count'])
+LabelStat = namedtuple('LabelStat', ['name', 'color', 'usage_count'])
 
 statistics_bp = Blueprint('statistics', __name__, url_prefix='/statistics')
 
@@ -17,30 +22,106 @@ statistics_bp = Blueprint('statistics', __name__, url_prefix='/statistics')
 @login_required
 def overview():
     """Pagina principale delle statistiche"""
-    # Statistiche generali
-    total_annotations = CellAnnotation.query.count()
-    total_users = User.query.count()
+    # Statistiche generali - Excel files
+    total_cell_annotations = CellAnnotation.query.count()
     total_cells = TextCell.query.count()
+    total_excel_files = ExcelFile.query.count()
+    
+    # Statistiche generali - Text documents  
+    total_text_annotations = TextAnnotation.query.count()
+    total_text_documents = TextDocument.query.count()
+    
+    # Statistiche combinate
+    total_annotations = total_cell_annotations + total_text_annotations
+    total_documents = total_excel_files + total_text_documents
+    total_users = User.query.count()
     total_labels = Label.query.count()
     
-    # Top 10 annotatori
-    top_annotators = db.session.query(
+    # Top 10 annotatori (combinando Excel e Text annotations)
+    # Prima query per annotazioni Excel - convertita in subquery
+    excel_annotators = db.session.query(
         User.username,
         User.id,
-        func.count(CellAnnotation.id).label('annotation_count')
-    ).join(CellAnnotation, User.id == CellAnnotation.user_id).group_by(User.id).order_by(desc('annotation_count')).limit(10).all()
+        func.count(CellAnnotation.id).label('cell_count'),
+        func.cast(0, db.Integer).label('text_count')
+    ).join(CellAnnotation, User.id == CellAnnotation.user_id)\
+     .group_by(User.id).subquery()
     
-    # Etichette più usate
-    top_labels = db.session.query(
-        Label.name,
-        func.coalesce(Category.color, Label.color).label('color'),
-        func.count(CellAnnotation.id).label('usage_count')
-    ).join(CellAnnotation)\
-     .outerjoin(Category, Label.category_id == Category.id)\
-     .group_by(Label.id).order_by(desc('usage_count')).limit(10).all()
+    # Seconda query per annotazioni testo - convertita in subquery
+    text_annotators = db.session.query(
+        User.username,
+        User.id,
+        func.cast(0, db.Integer).label('cell_count'),
+        func.count(TextAnnotation.id).label('text_count')
+    ).join(TextAnnotation, User.id == TextAnnotation.user_id)\
+     .group_by(User.id).subquery()
     
-    # Statistiche per file
-    file_stats = db.session.query(
+    # Combina i risultati
+    combined_annotators = db.session.query(
+        User.username,
+        User.id,
+        func.sum(func.coalesce(excel_annotators.c.cell_count, 0) + func.coalesce(text_annotators.c.text_count, 0)).label('total_count')
+    ).select_from(User)\
+     .outerjoin(excel_annotators, User.id == excel_annotators.c.id)\
+     .outerjoin(text_annotators, User.id == text_annotators.c.id)\
+     .group_by(User.id)\
+     .order_by(desc('total_count'))\
+     .limit(10)
+    
+    # Esegui la query in modo più semplice per evitare problemi
+    top_annotators = []
+    try:
+        # Alternativa più semplice: calcola manualmente
+        all_users = User.query.all()
+        user_counts = []
+        for user in all_users:
+            cell_count = CellAnnotation.query.filter_by(user_id=user.id).count()
+            text_count = TextAnnotation.query.filter_by(user_id=user.id).count()
+            total_count = cell_count + text_count
+            if total_count > 0:
+                user_counts.append(UserStat(username=user.username, id=user.id, annotation_count=total_count))
+        
+        # Ordina e prendi i top 10
+        user_counts.sort(key=lambda x: x.annotation_count, reverse=True)
+        top_annotators = user_counts[:10]
+    except Exception as e:
+        # Fallback alla query originale in caso di errore
+        top_annotators = db.session.query(
+            User.username,
+            User.id,
+            func.count(CellAnnotation.id).label('annotation_count')
+        ).join(CellAnnotation, User.id == CellAnnotation.user_id).group_by(User.id).order_by(desc('annotation_count')).limit(10).all()
+    
+    # Etichette più usate (combinando Excel e Text annotations)
+    top_labels = []
+    try:
+        # Calcola manualmente per evitare problemi con query complesse
+        all_labels = Label.query.all()
+        label_counts = []
+        for label in all_labels:
+            cell_count = CellAnnotation.query.filter_by(label_id=label.id).count()
+            text_count = TextAnnotation.query.filter_by(label_id=label.id).count()
+            total_count = cell_count + text_count
+            if total_count > 0:
+                # Determina il colore
+                color = label.category_obj.color if label.category_obj else label.color
+                label_counts.append(LabelStat(name=label.name, color=color or '#6c757d', usage_count=total_count))
+        
+        # Ordina e prendi le top 10
+        label_counts.sort(key=lambda x: x.usage_count, reverse=True)
+        top_labels = label_counts[:10]
+    except Exception as e:
+        # Fallback alla query originale in caso di errore
+        top_labels = db.session.query(
+            Label.name,
+            func.coalesce(Category.color, Label.color).label('color'),
+            func.count(CellAnnotation.id).label('usage_count')
+        ).join(CellAnnotation)\
+         .outerjoin(Category, Label.category_id == Category.id)\
+         .group_by(Label.id).order_by(desc('usage_count')).limit(10).all()
+    
+    # Statistiche per file Excel
+    excel_file_stats = db.session.query(
         ExcelFile.id,
         ExcelFile.filename,
         func.count(distinct(TextCell.id)).label('total_cells'),
@@ -52,33 +133,114 @@ def overview():
      .order_by(desc('total_annotations'))\
      .all()
     
+    # Statistiche per documenti di testo
+    text_document_stats = db.session.query(
+        TextDocument.id,
+        TextDocument.original_name,
+        func.count(TextAnnotation.id).label('total_annotations'),
+        func.count(distinct(TextAnnotation.user_id)).label('annotator_count')
+    ).outerjoin(TextAnnotation, TextDocument.id == TextAnnotation.document_id)\
+     .group_by(TextDocument.id)\
+     .order_by(desc('total_annotations'))\
+     .all()
+    
+    # Combina le statistiche per file (per compatibilità con il template)
+    file_stats = []
+    
+    # Aggiungi file Excel
+    for stat in excel_file_stats:
+        file_stats.append({
+            'id': stat.id,
+            'filename': stat.filename,
+            'type': 'excel',
+            'total_cells': stat.total_cells,
+            'total_annotations': stat.total_annotations,
+            'annotator_count': stat.annotator_count
+        })
+    
+    # Aggiungi documenti di testo  
+    for stat in text_document_stats:
+        file_stats.append({
+            'id': stat.id,
+            'filename': stat.original_name,
+            'type': 'text',
+            'total_cells': 1,  # Per i documenti di testo consideriamo 1 "unità"
+            'total_annotations': stat.total_annotations,
+            'annotator_count': stat.annotator_count
+        })
+    
+    # Ordina per numero di annotazioni
+    file_stats.sort(key=lambda x: x['total_annotations'], reverse=True)
+    
     # Dati per grafici
-    # Annotazioni per utente (per grafico)
-    user_chart_data = db.session.query(
-        User.username,
-        func.count(CellAnnotation.id).label('count')
-    ).join(CellAnnotation, User.id == CellAnnotation.user_id).group_by(User.id).order_by(desc('count')).limit(15).all()
+    # Annotazioni per utente (per grafico) - combinando entrambi i tipi
+    user_chart_data = []
+    try:
+        # Stesso approccio semplice usato sopra
+        user_chart_counts = [(user.username, user.annotation_count) for user in top_annotators[:15]]
+        user_chart_data = user_chart_counts
+    except Exception as e:
+        # Fallback alla query originale
+        user_chart_data = db.session.query(
+            User.username,
+            func.count(CellAnnotation.id).label('count')
+        ).join(CellAnnotation, User.id == CellAnnotation.user_id).group_by(User.id).order_by(desc('count')).limit(15).all()
     
-    # Distribuzione etichette (per grafico)
-    label_chart_data = db.session.query(
-        Label.name,
-        func.coalesce(Category.color, Label.color).label('color'),
-        func.count(CellAnnotation.id).label('count')
-    ).join(CellAnnotation)\
-     .outerjoin(Category, Label.category_id == Category.id)\
-     .group_by(Label.id).order_by(desc('count')).limit(10).all()
+    # Distribuzione etichette (per grafico) - usando i dati già calcolati
+    label_chart_data = []
+    try:
+        # Usa i dati già calcolati da top_labels
+        label_chart_data = top_labels[:10]
+    except Exception as e:
+        # Fallback alla query originale
+        label_chart_data = db.session.query(
+            Label.name,
+            func.coalesce(Category.color, Label.color).label('color'),
+            func.count(CellAnnotation.id).label('count')
+        ).join(CellAnnotation)\
+         .outerjoin(Category, Label.category_id == Category.id)\
+         .group_by(Label.id).order_by(desc('count')).limit(10).all()
     
-    # Timeline attività
-    timeline_data = db.session.query(
-        func.date(CellAnnotation.created_at).label('date'),
-        func.count(CellAnnotation.id).label('count')
-    ).group_by(func.date(CellAnnotation.created_at)).order_by('date').all()
+    # Timeline attività (combinando entrambi i tipi)
+    try:
+        # Timeline per annotazioni Excel
+        excel_timeline = db.session.query(
+            func.date(CellAnnotation.created_at).label('date'),
+            func.count(CellAnnotation.id).label('count')
+        ).group_by(func.date(CellAnnotation.created_at)).all()
+        
+        # Timeline per annotazioni testo
+        text_timeline = db.session.query(
+            func.date(TextAnnotation.created_at).label('date'),
+            func.count(TextAnnotation.id).label('count')
+        ).group_by(func.date(TextAnnotation.created_at)).all()
+        
+        # Combina le timeline
+        timeline_dict = {}
+        for date, count in excel_timeline:
+            timeline_dict[date] = timeline_dict.get(date, 0) + count
+        for date, count in text_timeline:
+            timeline_dict[date] = timeline_dict.get(date, 0) + count
+            
+        # Converti in lista ordinata
+        timeline_data = [(date, count) for date, count in sorted(timeline_dict.items())]
+    except Exception as e:
+        # Fallback alla query originale
+        timeline_data = db.session.query(
+            func.date(CellAnnotation.created_at).label('date'),
+            func.count(CellAnnotation.id).label('count')
+        ).group_by(func.date(CellAnnotation.created_at)).order_by('date').all()
     
     return render_template('statistics/overview.html',
                          total_annotations=total_annotations,
                          total_users=total_users,
                          total_cells=total_cells,
                          total_labels=total_labels,
+                         total_documents=total_documents,
+                         total_text_documents=total_text_documents,
+                         total_excel_files=total_excel_files,
+                         total_cell_annotations=total_cell_annotations,
+                         total_text_annotations=total_text_annotations,
                          top_annotators=top_annotators,
                          top_labels=top_labels,
                          file_stats=file_stats,
@@ -642,7 +804,6 @@ def question_chart_data(file_id, chart_type):
             return jsonify({'error': 'Chart type not found'}), 404
     except Exception as e:
         print(f"[ERROR] Eccezione nell'API: {str(e)}")
-        import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
