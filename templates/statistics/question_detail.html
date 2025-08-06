@@ -293,245 +293,6 @@
                 </div>
             </div>
 
-            <!-- Grafici e Visualizzazioni -->
-            <div class="row mb-4">
-                <div class="col-md-12">
-                    <div class="card">
-                        <div class="card-header">
-                            <h5 class="card-title mb-0">
-                                <i class="bi bi-bar-chart me-2"></i>Visualizzazioni Grafiche
-                                <small class="text-muted">(Analisi visiva dei dati)</small>
-                            </h5>
-                        </div>
-                        <div class="card-body">
-                            <!-- Filtri per i grafici -->
-                            <div class="row mb-3">
-                                <div class="col-md-12">
-                                    <div class="card border-info chart-filters-container">
-                                        <div class="card-header bg-info text-white py-2">
-                                            <h6 class="mb-0">
-                                                <i class="bi bi-funnel me-1"></i>Filtri per Grafici
-                                                <small class="ms-2">- Applicano a tutte le visualizzazioni</small>
-                                            </h6>
-                                        </div>
-                                        <div class="card-body py-3">
-                                            <div class="row g-2 align-items-end">
-                                                <div class="col-md-3">
-                                                    <label for="chart-category-filter" class="form-label small mb-1">
-                                                        <strong>Categoria:</strong>
-                                                    </label>
-                                                    <select class="form-select form-select-sm" id="chart-category-filter">
-                                                        <option value="">Tutte le categorie</option>
-                                                        {% for category in available_categories %}
-                                                        <option value="{{ category }}">{{ category }}</option>
-                                                        {% endfor %}
-                                                    </select>
-                                                </div>
-                                                <div class="col-md-3">
-                                                    <label for="chart-label-filter" class="form-label small mb-1">
-                                                        <strong>Etichetta:</strong>
-                                                    </label>
-                                                    <input type="text" class="form-control form-control-sm" 
-                                                           id="chart-label-filter" placeholder="Cerca etichetta...">
-                                                </div>
-                                                <div class="col-md-2">
-                                                    <label for="chart-min-usage" class="form-label small mb-1">
-                                                        <strong>Min Utilizzi:</strong>
-                                                    </label>
-                                                    <input type="number" class="form-control form-control-sm" 
-                                                           id="chart-min-usage" min="1" placeholder="1">
-                                                </div>
-                                                <div class="col-md-2">
-                                                    <label for="chart-max-usage" class="form-label small mb-1">
-                                                        <strong>Max Utilizzi:</strong>
-                                                    </label>
-                                                    <input type="number" class="form-control form-control-sm" 
-                                                           id="chart-max-usage" min="1" placeholder="∞">
-                                                </div>
-                                                <div class="col-md-2">
-                                                    <div class="d-flex gap-1">
-                                                        <button type="button" class="btn btn-primary btn-sm flex-fill" 
-                                                                id="update-charts-btn" onclick="updateAllCharts()" 
-                                                                title="Applica filtri ai grafici">
-                                                            <i class="bi bi-arrow-clockwise"></i> Aggiorna
-                                                        </button>
-                                                        <button type="button" class="btn btn-outline-secondary btn-sm" 
-                                                                onclick="resetChartFilters()" title="Reset filtri">
-                                                            <i class="bi bi-x-circle"></i>
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <div class="row mt-2">
-                                                <div class="col-12 text-center">
-                                                    <small class="text-muted">
-                                                        <i class="bi bi-info-circle me-1"></i>
-                                                        I filtri si applicano a tutti i grafici. Usa "Aggiorna" per applicare le modifiche.
-                                                        <span id="chart-filter-status" class="ms-2"></span>
-                                                    </small>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <!-- Tabs per i diversi grafici -->
-                            <ul class="nav nav-tabs mb-3" id="chartsTab" role="tablist">
-                                <li class="nav-item" role="presentation">
-                                    <button class="nav-link active" id="labels-chart-tab" data-bs-toggle="tab" data-bs-target="#labels-chart" type="button" role="tab">
-                                        <i class="bi bi-bar-chart-fill me-1"></i>Etichette
-                                    </button>
-                                </li>
-                                <li class="nav-item" role="presentation">
-                                    <button class="nav-link" id="annotators-chart-tab" data-bs-toggle="tab" data-bs-target="#annotators-chart" type="button" role="tab">
-                                        <i class="bi bi-people-fill me-1"></i>Annotatori
-                                    </button>
-                                </li>
-                                <li class="nav-item" role="presentation">
-                                    <button class="nav-link" id="categories-chart-tab" data-bs-toggle="tab" data-bs-target="#categories-chart" type="button" role="tab">
-                                        <i class="bi bi-pie-chart-fill me-1"></i>Categorie
-                                    </button>
-                                </li>
-                                <li class="nav-item" role="presentation">
-                                    <button class="nav-link" id="coverage-chart-tab" data-bs-toggle="tab" data-bs-target="#coverage-chart" type="button" role="tab">
-                                        <i class="bi bi-graph-up me-1"></i>Copertura
-                                    </button>
-                                </li>
-                            </ul>
-                            
-                            <div class="tab-content" id="chartsTabContent">
-                                <!-- Grafico Etichette -->
-                                <div class="tab-pane fade show active" id="labels-chart" role="tabpanel">
-                                    <div class="row">
-                                        <div class="col-md-8">
-                                            <h6 class="mb-3">
-                                                <i class="bi bi-tags me-1"></i>Istogramma Utilizzo Etichette
-                                                <small class="text-muted">- Frequenza di utilizzo per ogni etichetta</small>
-                                            </h6>
-                                            <div class="chart-container" style="height: 400px;">
-                                                <canvas id="labelsHistogramChart"></canvas>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-4">
-                                            <h6 class="mb-3">
-                                                <i class="bi bi-info-circle me-1"></i>Informazioni
-                                            </h6>
-                                            <div class="alert alert-info">
-                                                <small>
-                                                    <strong>Cosa mostra:</strong><br>
-                                                    • Numero di utilizzi per ogni etichetta<br>
-                                                    • I colori rappresentano le etichette originali<br>
-                                                    • Ordinamento decrescente per utilizzo
-                                                </small>
-                                            </div>
-                                            <div id="labelsChartLegend" class="mt-3">
-                                                <!-- Legenda dinamica -->
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                
-                                <!-- Grafico Annotatori -->
-                                <div class="tab-pane fade" id="annotators-chart" role="tabpanel">
-                                    <div class="row">
-                                        <div class="col-md-8">
-                                            <h6 class="mb-3">
-                                                <i class="bi bi-people me-1"></i>Confronto Annotatori
-                                                <small class="text-muted">- Produttività e copertura per annotatore</small>
-                                            </h6>
-                                            <div class="chart-container" style="height: 400px;">
-                                                <canvas id="annotatorsHistogramChart"></canvas>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-4">
-                                            <h6 class="mb-3">
-                                                <i class="bi bi-info-circle me-1"></i>Metriche
-                                            </h6>
-                                            <div class="alert alert-info">
-                                                <small>
-                                                    <strong>Barre blu:</strong> Totale annotazioni<br>
-                                                    <strong>Barre verdi:</strong> Celle uniche annotate<br>
-                                                    <strong>Rapporto:</strong> Intensità di annotazione per cella
-                                                </small>
-                                            </div>
-                                            <div id="annotatorsStats" class="mt-3">
-                                                <!-- Statistiche dinamiche -->
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                
-                                <!-- Grafico Categorie -->
-                                <div class="tab-pane fade" id="categories-chart" role="tabpanel">
-                                    <div class="row">
-                                        <div class="col-md-8">
-                                            <h6 class="mb-3">
-                                                <i class="bi bi-collection me-1"></i>Distribuzione per Categoria
-                                                <small class="text-muted">- Raggruppamento tematico delle annotazioni</small>
-                                            </h6>
-                                            <div class="chart-container" style="height: 400px;">
-                                                <canvas id="categoriesDistributionChart"></canvas>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-4">
-                                            <h6 class="mb-3">
-                                                <i class="bi bi-pie-chart me-1"></i>Riassunto
-                                            </h6>
-                                            <div class="alert alert-success">
-                                                <small>
-                                                    <strong>Vista d'insieme:</strong><br>
-                                                    • Distribuzione per categoria tematica<br>
-                                                    • Identificazione dei temi predominanti<br>
-                                                    • Bilanciamento delle annotazioni
-                                                </small>
-                                            </div>
-                                            <div id="categoriesStats" class="mt-3">
-                                                <!-- Statistiche categorie -->
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                
-                                <!-- Grafico Copertura -->
-                                <div class="tab-pane fade" id="coverage-chart" role="tabpanel">
-                                    <div class="row">
-                                        <div class="col-md-6">
-                                            <h6 class="mb-3">
-                                                <i class="bi bi-speedometer2 me-1"></i>Copertura Annotazioni
-                                            </h6>
-                                            <div class="chart-container" style="height: 300px;">
-                                                <canvas id="coverageOverviewChart"></canvas>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-6">
-                                            <h6 class="mb-3">
-                                                <i class="bi bi-graph-up me-1"></i>Distribuzione Intensità
-                                            </h6>
-                                            <div class="chart-container" style="height: 300px;">
-                                                <canvas id="coverageDistributionChart"></canvas>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-12 mt-3">
-                                            <div class="alert alert-warning">
-                                                <small>
-                                                    <strong>Analisi Copertura:</strong> 
-                                                    Mostra quante celle sono state annotate e con quale intensità. 
-                                                    Una buona copertura indica completezza del lavoro di annotazione.
-                                                </small>
-                                            </div>
-                                            <div id="coverageStats" class="row text-center">
-                                                <!-- Statistiche copertura -->
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
             <!-- Statistiche Annotatori -->
             <div class="row mb-4">
                 <div class="col-md-12">
@@ -731,6 +492,44 @@
                 </div>
             </div>
 
+            <!-- Istogramma Etichette Filtrate -->
+            {% if label_stats %}
+            <div class="row mb-4">
+                <div class="col-md-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">
+                                <i class="bi bi-bar-chart-fill me-2"></i>Istogramma Utilizzi Etichette
+                                <small class="text-muted">(Visualizzazione delle etichette con i loro utilizzi)</small>
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-12">
+                                    <div class="chart-container" style="height: 400px;">
+                                        <canvas id="histogramLabelsChart"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="row mt-3">
+                                <div class="col-md-12">
+                                    <div class="alert alert-info">
+                                        <small>
+                                            <strong>Informazioni Istogramma:</strong><br>
+                                            • Barre colorate con i colori originali delle etichette<br>
+                                            • Altezza barre = numero di utilizzi per etichetta<br>
+                                            • Applica gli stessi filtri della tabella sopra<br>
+                                            • Ordinamento rispetta la selezione nella tabella
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
             <!-- Report Etichette con Commenti -->
             <div class="row mb-4">
                 <div class="col-md-12">
@@ -809,48 +608,6 @@
                     </div>
                 </div>
             </div>
-
-            <!-- Grafico Distribuzione Etichette dal Report Completo -->
-            {% if labels_with_comments %}
-            <div class="row mb-4">
-                <div class="col-md-12">
-                    <div class="card">
-                        <div class="card-header">
-                            <h5 class="card-title mb-0">
-                                <i class="bi bi-pie-chart me-2"></i>Distribuzione Etichette del Report Completo
-                                <small class="text-muted">(Frequenza di utilizzo delle etichette mostrate sopra)</small>
-                            </h5>
-                        </div>
-                        <div class="card-body">
-                            <div class="row">
-                                <div class="col-md-8">
-                                    <div class="chart-container" style="height: 400px;">
-                                        <canvas id="reportLabelsChart"></canvas>
-                                    </div>
-                                </div>
-                                <div class="col-md-4">
-                                    <h6 class="mb-3">
-                                        <i class="bi bi-info-circle me-1"></i>Informazioni Grafico
-                                    </h6>
-                                    <div class="alert alert-success">
-                                        <small>
-                                            <strong>Cosa mostra:</strong><br>
-                                            • Etichette presenti nel report completo<br>
-                                            • Numero di commenti per ogni etichetta<br>
-                                            • Colori originali delle etichette<br>
-                                            • Applica gli stessi filtri della tabella
-                                        </small>
-                                    </div>
-                                    <div id="reportLabelsLegend" class="mt-3">
-                                        <!-- Legenda dinamica per le etichette del report -->
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            {% endif %}
 
             <!-- Annotazioni per Cella -->
             <div class="row mb-4">
@@ -1040,14 +797,11 @@ function toggleHighlight() {
 let highlightEnabled = false;
 
 // Variabili globali per i grafici
-let labelsChart, annotatorsChart, categoriesChart, coverageOverviewChart, coverageDistributionChart, reportLabelsChart;
+let labelsChart, annotatorsChart, categoriesChart, coverageOverviewChart, coverageDistributionChart, reportLabelsChart, histogramLabelsChart;
 
 // Inizializzazione al caricamento della pagina
 document.addEventListener('DOMContentLoaded', function() {
     console.log('🎯 Inizializzazione grafici statistiche...');
-    
-    // PROTEZIONE FILTRI: Previeni rimozione automatica
-    protectChartFilters();
     
     // Inizializza grafici quando i tab vengono attivati
     const labelsTab = document.getElementById('labels-chart-tab');
@@ -1083,32 +837,8 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // Aggiungi listener per aggiornamento automatico con Enter
-    const chartFilters = document.querySelectorAll('#chart-category-filter, #chart-label-filter, #chart-min-usage, #chart-max-usage');
-    chartFilters.forEach(filter => {
-        if (!filter) return;
-        
-        filter.addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                console.log('⌨️ Aggiornamento grafici da tastiera');
-                updateAllCharts();
-            }
-        });
-        
-        // Auto-aggiornamento per select categoria
-        if (filter.tagName === 'SELECT' && filter.id === 'chart-category-filter') {
-            filter.addEventListener('change', function() {
-                console.log('🔄 Auto-aggiornamento da cambio categoria');
-                updateAllCharts();
-            });
-        }
-    });
-    
-    // Inizializza stato filtri
-    updateFilterStatus({});
-    
-    // Protezione aggiuntiva ogni 2 secondi
-    setInterval(protectChartFilters, 2000);
+
+
     
     // Carica il primo grafico (etichette) dopo un piccolo delay
     setTimeout(() => {
@@ -1116,10 +846,10 @@ document.addEventListener('DOMContentLoaded', function() {
         loadLabelsChart();
     }, 500);
     
-    // Carica il grafico del report completo
+    // Carica l'istogramma delle etichette
     setTimeout(() => {
-        console.log('📊 Caricamento grafico report completo...');
-        loadReportLabelsChart();
+        console.log('📊 Caricamento istogramma etichette...');
+        loadHistogramLabelsChart();
     }, 800);
     
     // Setup filtri esistenti
@@ -1636,18 +1366,18 @@ function loadCoverageCharts() {
         });
 }
 
-// Carica grafico report etichette 
-function loadReportLabelsChart() {
-    console.log('📊 loadReportLabelsChart() chiamata');
+// Carica istogramma etichette
+function loadHistogramLabelsChart() {
+    console.log('📊 loadHistogramLabelsChart() chiamata');
     
-    if (reportLabelsChart) {
-        console.log('🗑️ Distruggendo grafico report esistente');
-        reportLabelsChart.destroy();
+    if (histogramLabelsChart) {
+        console.log('🗑️ Distruggendo istogramma esistente');
+        histogramLabelsChart.destroy();
     }
     
-    const canvas = document.getElementById('reportLabelsChart');
+    const canvas = document.getElementById('histogramLabelsChart');
     if (!canvas) {
-        console.warn('⚠️ Canvas reportLabelsChart non trovato! Il grafico report non sarà disponibile.');
+        console.warn('⚠️ Canvas histogramLabelsChart non trovato! L\'istogramma non sarà disponibile.');
         return;
     }
     
@@ -1655,74 +1385,97 @@ function loadReportLabelsChart() {
     showChartLoader(ctx);
     
     // Prepara i dati dal context template
-    const reportData = {
+    const histogramData = {
         labels: [],
         values: [],
         colors: [],
         categories: []
     };
     
-    {% if labels_with_comments %}
-    // Raccogli dati dalle etichette del report completo
-    {% for label_name, comments in labels_with_comments.items() %}
-    reportData.labels.push('{{ label_name|escapejs }}');
-    reportData.values.push({{ comments|length }});
-    reportData.colors.push('{{ comments[0].color|default("#007bff") }}');
-    reportData.categories.push('{{ comments[0].category_name|default("Senza categoria")|escapejs }}');
+    {% if label_stats %}
+    // Raccogli dati dalle etichette filtrate della tabella
+    {% for label in label_stats %}
+    histogramData.labels.push('{{ label.name|escapejs }}');
+    histogramData.values.push({{ label.usage_count }});
+    histogramData.colors.push('{{ label.color|default("#007bff") }}');
+    histogramData.categories.push('{{ (label.category_name or "Senza categoria")|escapejs }}');
     {% endfor %}
     {% endif %}
     
-    console.log('📊 Dati report:', reportData);
+    console.log('📊 Dati istogramma:', histogramData);
     
-    if (reportData.labels.length === 0) {
-        showChartError(ctx, 'Nessuna etichetta disponibile nel report completo');
-        updateReportLabelsLegend({labels: [], categories: [], colors: [], values: []});
+    if (histogramData.labels.length === 0) {
+        showChartError(ctx, 'Nessuna etichetta disponibile nella tabella filtrata');
         return;
     }
     
-    reportLabelsChart = new Chart(ctx, {
-        type: 'doughnut',
+    histogramLabelsChart = new Chart(ctx, {
+        type: 'bar',
         data: {
-            labels: reportData.labels,
+            labels: histogramData.labels,
             datasets: [{
-                label: 'Commenti',
-                data: reportData.values,
-                backgroundColor: reportData.colors.map(color => color + '80'), // Aggiungi trasparenza
-                borderColor: reportData.colors,
-                borderWidth: 2
+                label: 'Numero di Utilizzi',
+                data: histogramData.values,
+                backgroundColor: histogramData.colors.map(color => color + '80'), // Aggiungi trasparenza
+                borderColor: histogramData.colors,
+                borderWidth: 2,
+                hoverBackgroundColor: histogramData.colors.map(color => color + '99'),
+                hoverBorderColor: histogramData.colors
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
+                legend: {
+                    display: false
+                },
                 title: {
                     display: true,
-                    text: 'Distribuzione etichette dal report completo',
+                    text: 'Distribuzione Utilizzi Etichette',
                     font: {
                         size: 16,
                         weight: 'bold'
                     }
                 },
-                legend: {
-                    position: 'bottom',
-                    labels: {
-                        padding: 20,
-                        usePointStyle: true
-                    }
-                },
                 tooltip: {
+                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                    titleColor: 'white',
+                    bodyColor: 'white',
                     callbacks: {
+                        title: function(context) {
+                            return context[0].label;
+                        },
                         label: function(context) {
-                            const total = reportData.values.reduce((a, b) => a + b, 0);
-                            const percentage = ((context.parsed / total) * 100).toFixed(1);
-                            const category = reportData.categories[context.dataIndex];
+                            const categoryIndex = context.dataIndex;
+                            const category = histogramData.categories[categoryIndex];
                             return [
-                                `Etichetta: ${context.label}`,
-                                `Commenti: ${context.parsed} (${percentage}%)`,
-                                `Categoria: ${category}`
+                                'Utilizzi: ' + context.raw,
+                                'Categoria: ' + category
                             ];
                         }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Numero di Utilizzi'
+                    },
+                    ticks: {
+                        stepSize: 1
+                    }
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Etichette'
+                    },
+                    ticks: {
+                        maxRotation: 45,
+                        minRotation: 0
                     }
                 }
             },
@@ -1733,8 +1486,7 @@ function loadReportLabelsChart() {
         }
     });
     
-    // Aggiorna legenda personalizzata
-    updateReportLabelsLegend(reportData);
+    console.log('✅ Istogramma etichette caricato con successo');
 }
 
 // Aggiorna legenda etichette
@@ -1998,7 +1750,7 @@ function updateAllCharts() {
     
     try {
         // Aggiorna sempre il grafico del report (visibile sempre)
-        loadReportLabelsChart();
+        loadHistogramLabelsChart();
         
         if (activeTab) {
             const tabId = activeTab.id;
