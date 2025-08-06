@@ -52,7 +52,7 @@ cd anatema
 # Avvia l'applicazione
 docker compose up -d
 
-# Accedi su http://localhost:5000
+# Accedi su http://localhost:5005
 # Username: admin | Password: admin123
 ```
 

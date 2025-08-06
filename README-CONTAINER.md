@@ -40,7 +40,7 @@ services:
   app:
     build: .
     ports:
-      - "5000:5000"
+      - "5005:5005"
     environment:
       - FLASK_ENV=development
       - FLASK_DEBUG=1

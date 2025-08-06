@@ -37,7 +37,7 @@ docker compose -f docker-compose.prod.yml up -d
 ```
 
 ### 4. Accedi all'applicazione
-- **URL**: http://localhost:5000
+- **URL**: http://localhost:5005
 - **Username**: admin
 - **Password**: admin123
 
@@ -135,11 +135,11 @@ RUN mkdir -p uploads instance backups \
 USER appuser
 
 # Esposizione porta
-EXPOSE 5000
+EXPOSE 5005
 
 # Healthcheck
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:5000/health || exit 1
+    CMD curl -f http://localhost:5005/health || exit 1
 
 # Comando di avvio
 CMD ["python", "app.py"]
@@ -166,7 +166,7 @@ chmod 600 .env
 chmod 755 uploads/ instance/
 
 # Configura firewall (esempio con ufw)
-sudo ufw allow 5000/tcp
+sudo ufw allow 5005/tcp
 sudo ufw enable
 ```
 

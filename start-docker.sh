@@ -13,7 +13,7 @@ fi
 
 # Funzione per controllare se il container è healthy
 check_health() {
-    local container_name="anatema-web"
+    local container_name="anatema"
     local max_attempts=30
     local attempt=1
     
