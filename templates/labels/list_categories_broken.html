@@ -167,12 +167,12 @@
 
 <!-- Form nascosto per eliminazione -->
 <form id="deleteForm" method="POST" style="display: none;">
-    {{ csrf_token() }}
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
 </form>
 
 <!-- Form nascosto per eliminazione con etichette -->
 <form id="deleteWithLabelsForm" method="POST" style="display: none;">
-    {{ csrf_token() }}
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
     <input type="hidden" name="force_delete" value="true">
 </form>
 {% endblock %}

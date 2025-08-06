@@ -142,7 +142,6 @@
                             <i class="bi bi-plus-circle me-2"></i>Aggiungi un Commento
                         </h6>
                         <form method="POST" action="{{ url_for('forum.add_comment', post_id=post.id) }}">
-                            {{ csrf_token() }}
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                             <div class="mb-3">
                                 <textarea class="form-control" name="content" rows="4" 
