@@ -1,0 +1,18 @@
+{#
+  Help tip macro — info icon with Bootstrap popover.
+  Usage:
+    {% from "_components/help_tip.html" import render_help %}
+    {{ render_help("Spiegazione contestuale di cosa fa questa pagina.") }}
+#}
+{% macro render_help(text, title='Aiuto') %}
+<button type="button"
+        class="btn btn-sm btn-link help-tip-btn p-0 ms-2 align-baseline"
+        data-bs-toggle="popover"
+        data-bs-trigger="focus"
+        data-bs-placement="bottom"
+        data-bs-title="{{ title }}"
+        data-bs-content="{{ text }}"
+        aria-label="{{ title }}">
+  <i class="bi bi-info-circle"></i>
+</button>
+{% endmacro %}

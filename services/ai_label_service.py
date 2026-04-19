@@ -15,10 +15,16 @@ class AILabelService:
         """
         Ottiene tutte le etichette formattate per l'AI
         """
-        labels = Label.query.order_by(Label.name).all()
+        labels = Label.query.filter(
+            Label.is_active == True,  # noqa: E712
+            Label.merged_into_label_id.is_(None)
+        ).order_by(Label.name).all()
         
         labels_data = []
         for label in labels:
+            if label.category_obj and (not label.category_obj.is_active or label.category_obj.merged_into_category_id is not None):
+                continue
+
             category_name = label.category_obj.name if label.category_obj else 'Generale'
             labels_data.append({
                 'id': label.id,
@@ -36,11 +42,18 @@ class AILabelService:
         """
         Ottiene tutte le categorie con le relative etichette per l'AI
         """
-        categories = Category.query.order_by(Category.name).all()
+        categories = Category.query.filter(
+            Category.is_active == True,  # noqa: E712
+            Category.merged_into_category_id.is_(None)
+        ).order_by(Category.name).all()
         
         categories_data = []
         for category in categories:
-            labels_in_category = Label.query.filter_by(category_id=category.id).order_by(Label.name).all()
+            labels_in_category = Label.query.filter(
+                Label.category_id == category.id,
+                Label.is_active == True,  # noqa: E712
+                Label.merged_into_label_id.is_(None)
+            ).order_by(Label.name).all()
             
             category_data = {
                 'id': category.id,
@@ -162,8 +175,9 @@ Rispondi SOLO con un JSON nel formato:
                     if not isinstance(label['id'], int):
                         return False
                     
-                    # Verifica che l'etichetta esista
-                    if not Label.query.get(label['id']):
+                    # Verifica che l'etichetta esista ed sia canonica attiva
+                    existing = Label.query.get(label['id'])
+                    if not existing or not existing.is_active or existing.merged_into_label_id is not None:
                         return False
                 
                 return True
@@ -198,8 +212,14 @@ Rispondi SOLO con un JSON nel formato:
         """
         Ottiene statistiche sull'utilizzo delle etichette per l'AI
         """
-        labels = Label.query.all()
-        categories = Category.query.all()
+        labels = Label.query.filter(
+            Label.is_active == True,  # noqa: E712
+            Label.merged_into_label_id.is_(None)
+        ).all()
+        categories = Category.query.filter(
+            Category.is_active == True,  # noqa: E712
+            Category.merged_into_category_id.is_(None)
+        ).all()
         
         stats = {
             'total_labels': len(labels),
@@ -212,7 +232,11 @@ Rispondi SOLO con un JSON nel formato:
         
         # Statistiche per categoria
         for category in categories:
-            category_labels = Label.query.filter_by(category_id=category.id).all()
+            category_labels = Label.query.filter(
+                Label.category_id == category.id,
+                Label.is_active == True,  # noqa: E712
+                Label.merged_into_label_id.is_(None)
+            ).all()
             stats['labels_by_category'][category.name] = {
                 'count': len(category_labels),
                 'labels': [label.name for label in category_labels]
@@ -254,7 +278,10 @@ Rispondi SOLO con un JSON nel formato:
         text_lower = text.lower()
         suggestions = []
         
-        labels = Label.query.all()
+        labels = Label.query.filter(
+            Label.is_active == True,  # noqa: E712
+            Label.merged_into_label_id.is_(None)
+        ).all()
         for label in labels:
             score = 0
             

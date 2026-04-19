@@ -62,11 +62,13 @@ class Category(db.Model):
     description = db.Column(db.Text)
     color = db.Column(db.String(7), default='#6c757d')  # Colore HEX
     is_active = db.Column(db.Boolean, default=True)  # Soft delete
+    merged_into_category_id = db.Column(db.Integer, db.ForeignKey('category.id'), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relazioni
     labels = db.relationship('Label', foreign_keys='Label.category_id', back_populates='category_obj')
+    merged_into_category = db.relationship('Category', remote_side=[id], backref='merged_categories')
     
     def __repr__(self):
         return f'<Category {self.name}>'
@@ -170,12 +172,14 @@ class Label(db.Model):
     category = db.Column(db.String(50))  # Manteniamo per compatibilità, sarà deprecato
     color = db.Column(db.String(7), default='#007bff')  # Colore HEX
     is_active = db.Column(db.Boolean, default=True)  # Soft delete
+    merged_into_label_id = db.Column(db.Integer, db.ForeignKey('label.id'), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relazioni
     annotations = db.relationship('CellAnnotation', backref='label', lazy=True, cascade='all, delete-orphan')
     category_obj = db.relationship('Category', foreign_keys=[category_id], back_populates='labels')
+    merged_into_label = db.relationship('Label', remote_side=[id], backref='merged_labels')
     
     def __repr__(self):
         return f'<Label {self.name}>'
@@ -410,6 +414,62 @@ class AnnotationAction(db.Model):
     def __repr__(self):
         return f'<AnnotationAction {self.id}: {self.action_type} on Cell {self.text_cell_id} by User {self.performed_by}>'
 
+
+class TaxonomyAlias(db.Model):
+    """Alias controllati per label/category canonicali."""
+    __tablename__ = 'taxonomy_alias'
+
+    id = db.Column(db.Integer, primary_key=True)
+    entity_type = db.Column(db.String(20), nullable=False)  # label | category
+    alias_name = db.Column(db.String(150), nullable=False)
+    alias_normalized = db.Column(db.String(150), nullable=False)
+    canonical_id = db.Column(db.Integer, nullable=False)
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+
+    creator = db.relationship('User', foreign_keys=[created_by])
+
+    __table_args__ = (
+        db.UniqueConstraint('entity_type', 'alias_normalized', name='uq_taxonomy_alias_entity_norm'),
+    )
+
+    def __repr__(self):
+        return f'<TaxonomyAlias {self.entity_type}:{self.alias_name} -> {self.canonical_id}>'
+
+
+class TaxonomyMergeAudit(db.Model):
+    """Audit delle operazioni di dry-run/apply su merge e razionalizzazione tassonomia."""
+    __tablename__ = 'taxonomy_merge_audit'
+
+    id = db.Column(db.Integer, primary_key=True)
+    entity_type = db.Column(db.String(20), nullable=False)  # label | category | taxonomy
+    source_ids = db.Column(db.Text, nullable=False)  # JSON array di ID
+    target_id = db.Column(db.Integer, nullable=True)
+    moved_annotations = db.Column(db.Integer, default=0)
+    dedup_deleted = db.Column(db.Integer, default=0)
+    performed_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    performed_at = db.Column(db.DateTime, default=datetime.utcnow)
+    mode = db.Column(db.String(20), nullable=False)  # dry_run | apply
+    payload_json = db.Column(db.Text)
+
+    performer = db.relationship('User', foreign_keys=[performed_by])
+
+    def get_source_ids(self):
+        try:
+            return json.loads(self.source_ids) if self.source_ids else []
+        except Exception:
+            return []
+
+    def get_payload(self):
+        try:
+            return json.loads(self.payload_json) if self.payload_json else {}
+        except Exception:
+            return {}
+
+    def __repr__(self):
+        return f'<TaxonomyMergeAudit {self.id}:{self.entity_type} mode={self.mode}>'
+
 class AIPromptTemplate(db.Model):
     """Template per prompt AI dinamici"""
     __tablename__ = 'ai_prompt_template'
@@ -478,6 +538,30 @@ class PromptTemplate(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
+    def process_placeholders(self, context: dict) -> str:
+        """Sostituisce i placeholder {key} nel template_text con i valori del context."""
+        try:
+            return self.template_text.format(**context)
+        except KeyError:
+            # Sostituzione manuale sicura per placeholder mancanti
+            result = self.template_text
+            for key, value in context.items():
+                result = result.replace(f'{{{key}}}', str(value))
+            return result
+
+    @property
+    def expected_labels_list(self):
+        """Estrae nomi di etichette dal template_text se presenti come array JSON."""
+        import re as _re
+        import json as _json
+        match = _re.search(r'\[([^\[\]]+)\]', self.template_text or '')
+        if match:
+            try:
+                return _json.loads(f'[{match.group(1)}]')
+            except Exception:
+                pass
+        return []
+
     def __repr__(self):
         return f'<PromptTemplate {self.name} ({self.category})>'
 
@@ -839,5 +923,4 @@ class DiaryAttachment(db.Model):
                 return f"{size:.1f} {unit}"
             size /= 1024
         return f"{size:.1f} TB"
-
 

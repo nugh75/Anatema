@@ -1,0 +1,49 @@
+{#
+  Page header macro.
+  Usage:
+    {% from "_components/page_header.html" import render_page_header %}
+    {{ render_page_header(
+        title='Etichette',
+        subtitle='Vocabolario tematico del progetto',
+        icon='bi-tags',
+        step_num=3,
+        help_text='Organizza le etichette in categorie prima di annotare.',
+        actions=[
+          {'label': 'Nuova Etichetta', 'url': url_for('labels.create_label'), 'icon': 'bi-plus-circle', 'style': 'primary'}
+        ]
+    ) }}
+  Parameters:
+    title       — string, required
+    subtitle    — string, optional
+    icon        — Bootstrap Icons class (es. 'bi-tags'), optional
+    step_num    — int 1..6, marca visivamente lo step del processo
+    help_text   — testo popover help
+    actions     — lista dict {label, url, icon, style (primary|outline|success|...)}
+#}
+{% from "_components/help_tip.html" import render_help %}
+
+{% macro render_page_header(title, subtitle=None, icon=None, step_num=None, help_text=None, actions=[]) %}
+<header class="page-header">
+  <div class="page-header__main">
+    {% if step_num %}
+      <span class="page-header__step" aria-label="Passo {{ step_num }}">{{ step_num }}</span>
+    {% endif %}
+    <div class="page-header__titles">
+      <h1 class="page-header__title">
+        {% if icon %}<i class="bi {{ icon }} me-2"></i>{% endif %}{{ title }}
+        {% if help_text %}{{ render_help(help_text) }}{% endif %}
+      </h1>
+      {% if subtitle %}<p class="page-header__subtitle">{{ subtitle }}</p>{% endif %}
+    </div>
+  </div>
+  {% if actions %}
+  <div class="page-header__actions">
+    {% for a in actions %}
+      <a href="{{ a.url }}" class="btn btn-{{ a.style|default('primary') }}">
+        {% if a.icon %}<i class="bi {{ a.icon }} me-1"></i>{% endif %}{{ a.label }}
+      </a>
+    {% endfor %}
+  </div>
+  {% endif %}
+</header>
+{% endmacro %}

@@ -1,20 +1,30 @@
 {% extends "base.html" %}
+{% from "_components/breadcrumb.html" import render_breadcrumb %}
+{% from "_components/page_header.html" import render_page_header %}
 
-{% block title %}Statistiche Annotazioni -Anatema{% endblock %}
+{% block title %}Statistiche - Anatema{% endblock %}
+
+{% block breadcrumb %}
+{{ render_breadcrumb([
+    ('Home', url_for('main.dashboard')),
+    ('Statistiche', None)
+]) }}
+{% endblock %}
+
+{% block page_header %}
+{{ render_page_header(
+    title='Statistiche',
+    subtitle='Monitora avanzamento, copertura etichette e confronto tra annotatori',
+    icon='bi-graph-up',
+    step_num=6,
+    help_text='Ultimo passo del processo: verifica la completezza e la qualità delle annotazioni prima dell\'export.',
+    actions=[
+      {'label': 'Confronta Annotatori', 'url': url_for('statistics.compare'), 'icon': 'bi-people', 'style': 'primary'}
+    ]
+) }}
+{% endblock %}
 
 {% block content %}
-<div class="row">
-    <div class="col-12">
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <h1><i class="bi bi-graph-up me-2"></i>Statistiche Annotazioni</h1>
-            <div>
-                <a href="{{ url_for('statistics.compare') }}" class="btn btn-primary">
-                    <i class="bi bi-people me-1"></i>Confronta Annotatori
-                </a>
-            </div>
-        </div>
-    </div>
-</div>
 
 <!-- Statistiche generali -->
 <div class="row mb-4">

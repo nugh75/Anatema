@@ -109,6 +109,7 @@ def preview_prompt():
         file_id = data.get('file_id')
         template_id = int(data.get('template_id', 1))
         selected_categories = data.get('selected_categories', [])
+        question_name = data.get('question_name')
         batch_size = int(data.get('batch_size', 5))
         
         # Validazione parametri
@@ -131,7 +132,8 @@ def preview_prompt():
             # Filtra per categorie specifiche
             categories = Category.query.filter(
                 Category.name.in_(selected_categories),
-                Category.is_active == True
+                Category.is_active == True,  # noqa: E712
+                Category.merged_into_category_id.is_(None)
             ).all()
             
             if not categories:
@@ -142,8 +144,10 @@ def preview_prompt():
             
             for cat in categories:
                 cat_labels = Label.query.options(db.joinedload(Label.category_obj)).filter_by(
-                    category_id=cat.id, 
-                    is_active=True
+                    category_id=cat.id
+                ).filter(
+                    Label.is_active == True,  # noqa: E712
+                    Label.merged_into_label_id.is_(None)
                 ).all()
                 labels.extend(cat_labels)
                 
@@ -154,9 +158,16 @@ def preview_prompt():
                 }), 400
         else:
             # Prendi tutte le etichette attive
-            labels = Label.query.options(db.joinedload(Label.category_obj)).filter_by(
-                is_active=True
-            ).order_by(Label.category, Label.name).all()
+            labels = Label.query.options(db.joinedload(Label.category_obj)).filter(
+                Label.is_active == True,  # noqa: E712
+                Label.merged_into_label_id.is_(None)
+            ).order_by(Label.name).all()
+            labels = [
+                lbl for lbl in labels
+                if not lbl.category_obj or (
+                    lbl.category_obj.is_active and lbl.category_obj.merged_into_category_id is None
+                )
+            ]
             
             if not labels:
                 return jsonify({
@@ -165,10 +176,14 @@ def preview_prompt():
                 }), 400
         
         # Prendi celle da annotare (migliore gestione dell'ordine)
-        cells = TextCell.query.filter(
+        cells_query = TextCell.query.filter(
             TextCell.excel_file_id == file_id,
             ~TextCell.id.in_(db.session.query(CellAnnotation.text_cell_id).distinct())
-        ).order_by(TextCell.row_index, TextCell.column_index).limit(batch_size).all()
+        )
+        if question_name:
+            cells_query = cells_query.filter(TextCell.column_name == question_name)
+
+        cells = cells_query.order_by(TextCell.row_index, TextCell.column_index).limit(batch_size).all()
         
         if not cells:
             return jsonify({
@@ -187,7 +202,8 @@ def preview_prompt():
                 'labels_count': len(labels),
                 'cells_count': len(cells),
                 'categories_used': len(selected_categories) if selected_categories else 'tutte',
-                'template_id': template_id
+                'template_id': template_id,
+                'question_name': question_name
             }
         })
         
@@ -211,6 +227,8 @@ def generate_annotations(file_id):
         mode = request_data.get('mode', 'new')  # new, replace, additional
         template_id = request_data.get('template_id', 1)
         selected_categories = request_data.get('selected_categories', [])
+        question_name = request_data.get('question_name')
+        max_cells_per_session = request_data.get('max_cells_per_session', 20)
         
         # Nuovi parametri dinamici
         max_tokens = request_data.get('max_tokens', 500)  # Default aumentato a 500
@@ -221,6 +239,8 @@ def generate_annotations(file_id):
         
         print(f"🚀 AI Generate: file_id={file_id}, batch_size={batch_size}, mode={mode}, template_id={template_id}")
         print(f"   Categorie selezionate: {selected_categories}")
+        if question_name:
+            print(f"   Domanda filtrata: {question_name}")
         print(f"   Max tokens: {max_tokens}, Timeout: {timeout}s")
         
         # Inizializza il servizio AI
@@ -234,7 +254,9 @@ def generate_annotations(file_id):
             template_id=template_id,
             selected_categories=selected_categories,
             max_tokens=max_tokens,
-            timeout=timeout
+            timeout=timeout,
+            question_name=question_name,
+            max_cells_per_session=max_cells_per_session
         )
         
         if 'error' in result:
@@ -250,7 +272,11 @@ def generate_annotations(file_id):
             'total_processed': result.get('total_processed', 0),
             'annotations_count': len(result.get('annotations', [])),
             'mode': mode,
-            're_annotate': (mode == 'replace')
+            're_annotate': (mode == 'replace'),
+            'question_name': result.get('question_name'),
+            'remaining_cells': result.get('remaining_cells', 0),
+            'total_target_cells': result.get('total_target_cells', 0),
+            'max_cells_per_session': result.get('max_cells_per_session', max_cells_per_session)
         })
         
     except Exception as e:
@@ -650,7 +676,10 @@ def validate_ai_configuration():
         
         # Controlla che ci siano etichette attive
         from models import Label
-        active_labels_count = Label.query.filter_by(is_active=True).count()
+        active_labels_count = Label.query.filter(
+            Label.is_active == True,  # noqa: E712
+            Label.merged_into_label_id.is_(None)
+        ).count()
         if active_labels_count == 0:
             validation_errors.append('Nessuna etichetta attiva disponibile')
         
@@ -664,7 +693,7 @@ def validate_ai_configuration():
         
         # Determina il modello in base al provider
         model_name = config.ollama_model if config.provider == 'ollama' else config.openrouter_model
-        
+
         return jsonify({
             'success': True,
             'config': {
@@ -675,6 +704,67 @@ def validate_ai_configuration():
                 'active_labels_count': active_labels_count
             }
         })
-        
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@ai_bp.route('/bulk/preview', methods=['POST'])
+@login_required
+def bulk_annotation_preview():
+    """Anteprima job di annotazione batch con template di prompt"""
+    try:
+        from services.bulk_annotation_service import BulkAnnotationService
+        data = request.get_json() or {}
+
+        file_id = data.get('file_id')
+        question = data.get('question')
+        template_id = data.get('template_id')
+        config_id = data.get('config_id')
+        options = data.get('options', {})
+
+        if not all([file_id, question, template_id, config_id]):
+            return jsonify({'success': False, 'error': 'Parametri mancanti: file_id, question, template_id, config_id richiesti'}), 400
+
+        service = BulkAnnotationService()
+        result = service.preview_annotation_job(file_id, question, int(template_id), int(config_id), options)
+
+        if 'error' in result:
+            return jsonify({'success': False, 'error': result['error']}), 400
+
+        return jsonify({'success': True, **result})
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@ai_bp.route('/bulk/execute', methods=['POST'])
+@login_required
+def bulk_annotation_execute():
+    """Esegue annotazione batch con template di prompt"""
+    try:
+        from services.bulk_annotation_service import BulkAnnotationService
+        data = request.get_json() or {}
+
+        file_id = data.get('file_id')
+        question = data.get('question')
+        template_id = data.get('template_id')
+        config_id = data.get('config_id')
+        options = data.get('options', {})
+
+        if not all([file_id, question, template_id, config_id]):
+            return jsonify({'success': False, 'error': 'Parametri mancanti: file_id, question, template_id, config_id richiesti'}), 400
+
+        service = BulkAnnotationService()
+        result = service.execute_bulk_annotation(
+            file_id, question, int(template_id), int(config_id), options,
+            user_id=current_user.id
+        )
+
+        if not result.get('success'):
+            return jsonify(result), 400
+
+        return jsonify(result)
+
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500

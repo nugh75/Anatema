@@ -1,148 +1,169 @@
 {% extends "base.html" %}
+{% from "_components/breadcrumb.html" import render_breadcrumb %}
+{% from "_components/page_header.html" import render_page_header %}
+{% from "_components/workflow_stepper.html" import render_stepper %}
 
-{% block title %}Dashboard -Anatema{% endblock %}
+{% block title %}Dashboard - Anatema{% endblock %}
+
+{% block breadcrumb %}
+{{ render_breadcrumb([
+    ('Home', url_for('main.dashboard')),
+    ('Dashboard', None)
+]) }}
+{% endblock %}
+
+{% block page_header %}
+{{ render_page_header(
+    title='Ciao ' ~ current_user.username,
+    subtitle='Panoramica delle tue attività di etichettatura tematica',
+    icon='bi-speedometer2',
+    help_text='Questa è la tua base: da qui vedi a che punto sei nel processo di annotazione e riprendi da dove hai lasciato.'
+) }}
+{% endblock %}
 
 {% block content %}
-<div class="row mb-4">
-    <div class="col-12">
-        <h2>
-            <i class="bi bi-speedometer2 me-2"></i>Dashboard di {{ current_user.username }}
-        </h2>
-        <p class="text-muted">Panoramica delle tue attività di etichettatura</p>
+
+{# Workflow stepper: where user is in the process #}
+<section class="mb-4">
+  <h2 class="h6 text-muted mb-2">Il tuo percorso</h2>
+  {{ render_stepper(active_step=next_step, completed_steps=completed_steps) }}
+</section>
+
+{# Next action CTA #}
+<div class="row g-3 mb-4">
+  <div class="col-lg-7">
+    <div class="card h-100">
+      <div class="card-body">
+        <h3 class="h5 mb-2">
+          <i class="bi bi-compass me-2 text-primary"></i>Prossimo passo consigliato
+        </h3>
+        {% if next_step == 1 %}
+          <p class="mb-3">Inizia caricando un file Excel con le risposte da annotare.</p>
+          <a href="{{ url_for('excel.upload') }}" class="btn btn-primary">
+            <i class="bi bi-cloud-upload me-1"></i>Carica il primo file
+          </a>
+        {% elif next_step == 2 %}
+          <p class="mb-3">Definisci le domande: assegna un tipo (aperta, chiusa, Likert, anagrafica) a ogni colonna.</p>
+          <a href="{{ url_for('questions.manage_questions') }}" class="btn btn-primary">
+            <i class="bi bi-patch-question me-1"></i>Gestisci domande
+          </a>
+        {% elif next_step == 3 %}
+          <p class="mb-3">Crea le etichette tematiche: sono il vocabolario con cui codificherai le risposte.</p>
+          <a href="{{ url_for('labels.list_labels') }}" class="btn btn-primary">
+            <i class="bi bi-tags me-1"></i>Gestisci etichette
+          </a>
+        {% elif next_step == 4 %}
+          <p class="mb-3">Inizia ad annotare le celle: assegna etichette alle risposte aperte.</p>
+          <a href="{{ url_for('annotation.browse_annotations') }}" class="btn btn-primary">
+            <i class="bi bi-pencil-square me-1"></i>Vai all'annotazione
+          </a>
+        {% elif next_step == 5 %}
+          <p class="mb-3">Usa l'AI per suggerire annotazioni e poi revisiona i risultati prima di accettarli.</p>
+          <a href="{{ url_for('ai.ai_dashboard') }}" class="btn btn-primary">
+            <i class="bi bi-robot me-1"></i>Vai alla revisione AI
+          </a>
+        {% else %}
+          <p class="mb-3">Consulta le statistiche per monitorare il progresso del progetto.</p>
+          <a href="{{ url_for('statistics.overview') }}" class="btn btn-primary">
+            <i class="bi bi-graph-up me-1"></i>Vai alle statistiche
+          </a>
+        {% endif %}
+
+        {% if last_file %}
+        <div class="mt-3 pt-3 border-top">
+          <small class="text-muted d-block mb-1">Ultimo file caricato:</small>
+          <a href="{{ url_for('excel.view_file', file_id=last_file.id) }}" class="text-decoration-none">
+            <i class="bi bi-file-earmark-excel me-1"></i>{{ last_file.original_filename }}
+          </a>
+        </div>
+        {% endif %}
+      </div>
     </div>
+  </div>
+
+  <div class="col-lg-5">
+    <div class="row g-3 h-100">
+      <div class="col-6">
+        <div class="card stat-card h-100">
+          <div class="card-body text-center">
+            <i class="bi bi-pencil-square stat-icon text-primary mb-2"></i>
+            <h3 class="card-title mb-0">{{ user_stats.my_annotations }}</h3>
+            <p class="card-text text-muted small mb-0">Annotazioni</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-6">
+        <div class="card stat-card h-100">
+          <div class="card-body text-center">
+            <i class="bi bi-file-earmark-excel stat-icon text-success mb-2"></i>
+            <h3 class="card-title mb-0">{{ user_stats.my_files }}</h3>
+            <p class="card-text text-muted small mb-0">File caricati</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
-<!-- Statistiche personali -->
-<div class="row mb-4">
-    <div class="col-md-6">
-        <div class="card bg-primary text-white stat-card">
-            <div class="card-body text-center">
-                <i class="bi bi-pencil-square stat-icon mb-3"></i>
-                <h3 class="card-title">{{ user_stats.my_annotations }}</h3>
-                <p class="card-text">Le Tue Annotazioni</p>
-            </div>
-        </div>
+{# Recent annotations #}
+<div class="card">
+  <div class="card-header d-flex align-items-center justify-content-between">
+    <h5 class="mb-0">
+      <i class="bi bi-clock-history me-2"></i>Le tue annotazioni recenti
+    </h5>
+    {% if recent_annotations %}
+    <a href="{{ url_for('annotation.browse_annotations') }}" class="btn btn-sm btn-outline-primary">
+      Vedi tutte
+    </a>
+    {% endif %}
+  </div>
+  <div class="card-body">
+    {% if recent_annotations %}
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead>
+          <tr>
+            <th>File</th>
+            <th>Cella</th>
+            <th>Contenuto</th>
+            <th>Etichetta</th>
+            <th>Data</th>
+            <th class="text-end">Azioni</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for annotation, cell, label in recent_annotations %}
+          <tr>
+            <td><small class="text-muted">{{ cell.excel_file.original_filename }}</small></td>
+            <td><code>{{ cell.sheet_name }}:{{ cell.cell_reference }}</code></td>
+            <td>
+              <div class="text-truncate-2" style="max-width: 240px;" title="{{ cell.text_content }}">
+                {{ cell.text_content }}
+              </div>
+            </td>
+            <td>
+              <span class="label-display" style="background-color: {{ label.color }};">{{ label.name }}</span>
+            </td>
+            <td><small class="text-muted">{{ annotation.created_at.strftime('%d/%m/%Y %H:%M') }}</small></td>
+            <td class="text-end">
+              <a href="{{ url_for('annotation.annotate_cell', cell_id=cell.id) }}"
+                 class="btn btn-sm btn-outline-primary">
+                <i class="bi bi-pencil"></i>
+              </a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
-    <div class="col-md-6">
-        <div class="card bg-success text-white stat-card">
-            <div class="card-body text-center">
-                <i class="bi bi-file-earmark-excel stat-icon mb-3"></i>
-                <h3 class="card-title">{{ user_stats.my_files }}</h3>
-                <p class="card-text">File Caricati da Te</p>
-            </div>
-        </div>
+    {% else %}
+    <div class="text-center py-4">
+      <i class="bi bi-info-circle display-4 text-muted mb-3"></i>
+      <h6 class="text-muted">Non hai ancora creato annotazioni</h6>
+      <p class="text-muted mb-3">Segui il percorso nel menu a sinistra per iniziare.</p>
     </div>
+    {% endif %}
+  </div>
 </div>
 
-<!-- Azioni rapide -->
-<div class="row mb-4">
-    <div class="col-12">
-        <div class="card">
-            <div class="card-header">
-                <h5 class="mb-0">
-                    <i class="bi bi-lightning me-2"></i>Azioni Rapide
-                </h5>
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-3">
-                        <a href="{{ url_for('excel.upload') }}" class="btn btn-primary btn-lg w-100 mb-3">
-                            <i class="bi bi-cloud-upload d-block mb-2" style="font-size: 2rem;"></i>
-                            Carica File Excel
-                        </a>
-                    </div>
-                    <div class="col-md-3">
-                        <a href="{{ url_for('annotation.browse_annotations') }}" class="btn btn-success btn-lg w-100 mb-3">
-                            <i class="bi bi-search d-block mb-2" style="font-size: 2rem;"></i>
-                            Naviga e Annota Celle
-                        </a>
-                    </div>
-                    <div class="col-md-3">
-                        <a href="{{ url_for('labels.create_label') }}" class="btn btn-info btn-lg w-100 mb-3">
-                            <i class="bi bi-plus-circle d-block mb-2" style="font-size: 2rem;"></i>
-                            Crea Etichetta
-                        </a>
-                    </div>
-                    <div class="col-md-3">
-                        <a href="{{ url_for('statistics.overview') }}" class="btn btn-warning btn-lg w-100 mb-3">
-                            <i class="bi bi-graph-up d-block mb-2" style="font-size: 2rem;"></i>
-                            Vedi Statistiche
-                        </a>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Attività recenti -->
-<div class="row">
-    <div class="col-12">
-        <div class="card">
-            <div class="card-header">
-                <h5 class="mb-0">
-                    <i class="bi bi-clock-history me-2"></i>Le Tue Annotazioni Recenti
-                </h5>
-            </div>
-            <div class="card-body">
-                {% if recent_annotations %}
-                <div class="table-responsive">
-                    <table class="table table-hover">
-                        <thead>
-                            <tr>
-                                <th>File</th>
-                                <th>Cella</th>
-                                <th>Contenuto</th>
-                                <th>Etichetta</th>
-                                <th>Data</th>
-                                <th>Azioni</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for annotation, cell, label in recent_annotations %}
-                            <tr>
-                                <td>
-                                    <small class="text-muted">{{ cell.excel_file.original_filename }}</small>
-                                </td>
-                                <td>
-                                    <code>{{ cell.sheet_name }}:{{ cell.cell_reference }}</code>
-                                </td>
-                                <td>
-                                    <div class="text-truncate-2" style="max-width: 200px;" title="{{ cell.text_content }}">
-                                        {{ cell.text_content }}
-                                    </div>
-                                </td>
-                                <td>
-                                    <span class="label-display" style="background-color: {{ label.color }};">
-                                        {{ label.name }}
-                                    </span>
-                                </td>
-                                <td>
-                                    <small class="text-muted">{{ annotation.created_at.strftime('%d/%m/%Y %H:%M') }}</small>
-                                </td>
-                                <td>
-                                    <a href="{{ url_for('annotation.annotate_cell', cell_id=cell.id) }}" 
-                                       class="btn btn-sm btn-outline-primary">
-                                        <i class="bi bi-pencil me-1"></i>Modifica
-                                    </a>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-                {% else %}
-                <div class="text-center py-5">
-                    <i class="bi bi-info-circle display-4 text-muted mb-3"></i>
-                    <h6 class="text-muted">Non hai ancora creato annotazioni</h6>
-                    <p class="text-muted">Inizia caricando un file Excel e annotando le celle testuali</p>
-                    <a href="{{ url_for('excel.upload') }}" class="btn btn-primary">
-                        <i class="bi bi-cloud-upload me-2"></i>Carica il Primo File
-                    </a>
-                </div>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-</div>
 {% endblock %}

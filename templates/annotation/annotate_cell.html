@@ -1,6 +1,15 @@
 {% extends "base.html" %}
+{% from "_components/breadcrumb.html" import render_breadcrumb %}
 
-{% block title %}Etichetta Cella -Anatema{% endblock %}
+{% block title %}Annota Cella - Anatema{% endblock %}
+
+{% block breadcrumb %}
+{{ render_breadcrumb([
+    ('Home', url_for('main.dashboard')),
+    ('Annotazione', navigation.back_url if navigation else url_for('annotation.browse_annotations')),
+    ((navigation.question_text[:50] + '...' if navigation and navigation.question_text|length > 50 else (navigation.question_text if navigation else 'Cella')), None)
+]) }}
+{% endblock %}
 
 {% block head %}
 {# Includi gli stili specifici della pagina #}
@@ -11,6 +20,10 @@
     top: 1rem;
     right: 1rem;
     z-index: 9999;
+}
+
+.annotation-page-layout .compact-toggle-btn {
+    min-width: 170px;
 }
 
 .label-badge {
@@ -58,8 +71,7 @@
 .cell-content {
     background: #f8f9fa;
     border-left: 4px solid #007bff;
-    padding: 1rem;
-    margin: 1rem 0;
+    padding: 0.75rem;
     border-radius: 0 8px 8px 0;
 }
 
@@ -75,34 +87,122 @@
 .other-annotation {
     border-left: 3px solid #6c757d;
 }
+
+/* Modalita' compatta per velocizzare l'etichettatura */
+#annotationPage.compact-mode .annotation-breadcrumb-row {
+    margin-bottom: 0.5rem !important;
+}
+
+#annotationPage.compact-mode .annotation-toolbar-row {
+    margin-bottom: 0.75rem !important;
+}
+
+#annotationPage.compact-mode .breadcrumb {
+    margin-bottom: 0.15rem;
+    font-size: 0.85rem;
+}
+
+#annotationPage.compact-mode .card-header {
+    padding: 0.5rem 0.75rem;
+}
+
+#annotationPage.compact-mode .card-body {
+    padding: 0.7rem 0.75rem;
+}
+
+#annotationPage.compact-mode .cell-info-card {
+    margin-bottom: 0.75rem !important;
+}
+
+#annotationPage.compact-mode .cell-content {
+    padding: 0.65rem 0.75rem;
+    margin: 0.6rem 0;
+    border-left-width: 3px;
+}
+
+#annotationPage.compact-mode .cell-content .fs-5 {
+    font-size: 1rem !important;
+    line-height: 1.35;
+}
+
+#annotationPage.compact-mode .label-badge {
+    padding: 0.25rem 0.6rem;
+    margin: 0.15rem;
+    border-radius: 14px;
+    font-size: 0.82rem;
+    border-width: 1px !important;
+}
+
+#annotationPage.compact-mode .category-group {
+    margin-bottom: 0.85rem !important;
+}
+
+#annotationPage.compact-mode .category-group h6 {
+    font-size: 0.9rem;
+    margin-bottom: 0.35rem !important;
+}
+
+#annotationPage.compact-mode .quick-actions-row {
+    margin-top: 0.75rem !important;
+    padding-top: 0.65rem !important;
+}
+
+#annotationPage.compact-mode .annotations-list {
+    max-height: 210px;
+}
+
+#annotationPage.compact-mode .annotation-history {
+    max-height: 320px;
+}
+
+#annotationPage.compact-mode .user-annotations-section {
+    padding: 0.6rem;
+    margin-bottom: 0.55rem !important;
+}
+
+#annotationPage.compact-mode .user-annotations-section .card.mb-2 {
+    margin-bottom: 0.35rem !important;
+}
+
+#annotationPage.compact-mode .remove-annotation-btn {
+    padding: 0.15rem 0.35rem;
+    font-size: 0.72rem;
+}
+
+#annotationPage.compact-mode .stats-card {
+    margin-top: 0.75rem !important;
+}
+
+#annotationPage.compact-mode .stats-card h4 {
+    font-size: 1.2rem;
+    margin-bottom: 0.1rem;
+}
+
+#annotationPage.compact-mode .stats-card hr {
+    margin: 0.6rem 0;
+}
+
+@media (min-width: 992px) {
+    #annotationPage.compact-mode .annotation-primary-column {
+        flex: 0 0 70%;
+        max-width: 70%;
+    }
+
+    #annotationPage.compact-mode .annotation-secondary-column {
+        flex: 0 0 30%;
+        max-width: 30%;
+    }
+}
 </style>
 {{ super() }} {# Importa stili da base.html #}
 {% endblock %}
 
 {% block content %}
-<!-- Breadcrumb di navigazione -->
-<div class="row mb-3">
-    <div class="col-12">
-        <nav aria-label="breadcrumb">
-            <ol class="breadcrumb">
-                <li class="breadcrumb-item"><a href="/">Home</a></li>
-                <li class="breadcrumb-item">
-                    <a href="{{ navigation.back_url if navigation else url_for('annotation.browse_annotations') }}">
-                        Annotazioni
-                    </a>
-                </li>
-                <li class="breadcrumb-item active" aria-current="page">
-                    {{ navigation.question_text[:50] + '...' if navigation.question_text|length > 50 else navigation.question_text }}
-                </li>
-            </ol>
-        </nav>
-    </div>
-</div>
-
+<div id="annotationPage" class="annotation-page-layout">
 <!-- Barra di navigazione migliorata -->
-<div class="row mb-4">
+<div class="row mb-4 annotation-toolbar-row">
     <div class="col-12">
-        <div class="card border-primary">
+        <div class="card border-primary annotation-toolbar-card">
             <div class="card-body py-2">
                 <div class="row align-items-center">
                     <div class="col-md-6">
@@ -136,6 +236,11 @@
                             {{ navigation.active_filters|length }} filtri attivi
                         </span>
                         {% endif %}
+                        <button type="button" class="btn btn-outline-dark btn-sm ms-2 compact-toggle-btn" id="compactModeToggle" aria-pressed="false"
+                                title="Riduce spazi e dimensioni per etichettare piu' velocemente">
+                            <i id="compactModeToggleIcon" class="bi bi-arrows-collapse me-1"></i>
+                            <span id="compactModeToggleText">Modalita' compatta</span>
+                        </button>
                     </div>
                 </div>
             </div>
@@ -143,48 +248,30 @@
     </div>
 </div>
 
-<div class="row">
-    <div class="col-md-8">
+<div class="row annotation-main-row g-3">
+    <div class="col-md-8 annotation-primary-column">
         <!-- Informazioni sulla cella -->
-        <div class="card mb-4">
+        <div class="card mb-4 cell-info-card">
             <div class="card-header">
                 <h5 class="mb-0">
                     <i class="bi bi-grid-3x3-gap me-2"></i>
                     Cella: {{ cell.sheet_name }} - {{ cell.cell_reference }}
                 </h5>
                 <small class="text-muted">
-                    File: {{ cell.excel_file.original_filename }} | 
-                    Colonna: {{ cell.column_name }}
+                    File: {{ cell.excel_file.original_filename }} |
+                    Colonna: {{ cell.column_name }} |
+                    <i class="bi bi-type me-1"></i>{{ cell.text_content|length }} caratteri
                 </small>
             </div>
-            <div class="card-body">
+            <div class="card-body p-2">
                 <div class="cell-content">
-                    <h6 class="text-muted mb-2">Contenuto della cella:</h6>
                     <div class="fs-5">{{ cell.text_content }}</div>
-                </div>
-                
-                <!-- Informazioni aggiuntive -->
-                <div class="d-flex justify-content-between align-items-center mt-3">
-                    <div>
-                        <small class="text-muted">
-                            <i class="bi bi-info-circle me-1"></i>
-                            Caratteri: {{ cell.text_content|length }}
-                        </small>
-                    </div>
-                    <div>
-                        {% if navigation %}
-                        <small class="text-muted">
-                            <i class="bi bi-question-circle me-1"></i>
-                            Domanda: {{ navigation.question_text[:30] + '...' if navigation.question_text|length > 30 else navigation.question_text }}
-                        </small>
-                        {% endif %}
-                    </div>
                 </div>
             </div>
         </div>
 
         <!-- Sezione etichettatura -->
-        <div class="card">
+        <div class="card labeling-card">
             <div class="card-header">
                 <h5 class="mb-0">
                     <i class="bi bi-tags me-2"></i>Assegna Etichette
@@ -236,7 +323,7 @@
                 </div>
 
                 <!-- Azioni rapide -->
-                <div class="mt-4 pt-3 border-top">
+                <div class="mt-4 pt-3 border-top quick-actions-row">
                     <div class="d-flex gap-2">
                         <button type="button" class="btn btn-outline-success btn-sm" id="selectAllBtn">
                             <i class="bi bi-check-all me-1"></i>Seleziona Tutte
@@ -254,8 +341,8 @@
     </div>
 
     <!-- Sidebar con storico annotazioni -->
-    <div class="col-md-4">
-        <div class="card">
+    <div class="col-md-4 annotation-secondary-column">
+        <div class="card history-card">
             <div class="card-header">
                 <h6 class="mb-0">
                     <i class="bi bi-clock-history me-2"></i>Etichette per Annotatore
@@ -356,7 +443,7 @@
         </div>
 
         <!-- Statistiche della cella -->
-        <div class="card mt-3">
+        <div class="card mt-3 stats-card">
             <div class="card-header">
                 <h6 class="mb-0">
                     <i class="bi bi-graph-up me-2"></i>Statistiche
@@ -481,6 +568,7 @@
         </div>
     </div>
 </div>
+</div>
 
 <!-- Loading spinner -->
 <div id="loadingSpinner" class="position-fixed top-50 start-50 translate-middle d-none">
@@ -498,10 +586,57 @@
 document.addEventListener('DOMContentLoaded', function() {
     const cellId = {{ cell.id }};
     const userLabelIds = new Set({{ user_label_ids | tojson | safe }});
+    const annotationPage = document.getElementById('annotationPage');
     const loadingSpinner = document.getElementById('loadingSpinner');
     const categoryFilter = document.getElementById('categoryFilter');
     const selectAllBtn = document.getElementById('selectAllBtn');
     const clearAllBtn = document.getElementById('clearAllBtn');
+    const compactModeToggle = document.getElementById('compactModeToggle');
+    const compactModeToggleText = document.getElementById('compactModeToggleText');
+    const compactModeToggleIcon = document.getElementById('compactModeToggleIcon');
+    const compactModeStorageKey = 'anatema.annotation.compact_mode';
+
+    function applyCompactMode(isCompact) {
+        if (!annotationPage || !compactModeToggle) {
+            return;
+        }
+
+        annotationPage.classList.toggle('compact-mode', isCompact);
+        compactModeToggle.setAttribute('aria-pressed', isCompact ? 'true' : 'false');
+        compactModeToggle.classList.toggle('btn-dark', isCompact);
+        compactModeToggle.classList.toggle('btn-outline-dark', !isCompact);
+
+        if (compactModeToggleText) {
+            compactModeToggleText.textContent = isCompact ? 'Modalita\' standard' : 'Modalita\' compatta';
+        }
+
+        if (compactModeToggleIcon) {
+            compactModeToggleIcon.className = isCompact
+                ? 'bi bi-arrows-angle-expand me-1'
+                : 'bi bi-arrows-collapse me-1';
+        }
+    }
+
+    if (annotationPage && compactModeToggle) {
+        let compactModeEnabled = false;
+        try {
+            compactModeEnabled = localStorage.getItem(compactModeStorageKey) === '1';
+        } catch (error) {
+            console.warn('LocalStorage non disponibile per la modalita\' compatta:', error);
+        }
+
+        applyCompactMode(compactModeEnabled);
+
+        compactModeToggle.addEventListener('click', function() {
+            const nextState = !annotationPage.classList.contains('compact-mode');
+            applyCompactMode(nextState);
+            try {
+                localStorage.setItem(compactModeStorageKey, nextState ? '1' : '0');
+            } catch (error) {
+                console.warn('Impossibile salvare la preferenza di visualizzazione:', error);
+            }
+        });
+    }
 
     // Funzione per ottenere il token CSRF
     function getCSRFToken() {
@@ -956,6 +1091,12 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // === SHORTCUT DA TASTIERA ===
     document.addEventListener('keydown', function(e) {
+        // Alt+C per attivare/disattivare la modalita' compatta
+        if (e.altKey && !e.ctrlKey && !e.metaKey && e.key.toLowerCase() === 'c') {
+            e.preventDefault();
+            compactModeToggle?.click();
+        }
+
         // Ctrl+← per cella precedente
         if (e.ctrlKey && e.key === 'ArrowLeft') {
             e.preventDefault();
@@ -989,13 +1130,14 @@ document.addEventListener('DOMContentLoaded', function() {
     shortcutInfo.className = 'position-fixed bottom-0 end-0 p-3';
     shortcutInfo.style.zIndex = '1050';
     shortcutInfo.innerHTML = `
-        <div class="card shadow-sm" style="max-width: 200px;">
+        <div class="card shadow-sm" style="max-width: 240px;">
             <div class="card-body p-2">
                 <h6 class="card-title fs-6 mb-2">Shortcut:</h6>
                 <small class="text-muted">
                     <kbd>Ctrl</kbd>+<kbd>←</kbd> Precedente<br>
                     <kbd>Ctrl</kbd>+<kbd>→</kbd> Successiva<br>
-                    <kbd>Ctrl</kbd>+<kbd>⌫</kbd> Torna alla lista
+                    <kbd>Ctrl</kbd>+<kbd>⌫</kbd> Torna alla lista<br>
+                    <kbd>Alt</kbd>+<kbd>C</kbd> Modalita' compatta
                 </small>
             </div>
         </div>

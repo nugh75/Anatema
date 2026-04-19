@@ -44,13 +44,34 @@ def index():
 @login_required
 def dashboard():
     """Dashboard utente"""
-    # Statistiche dell'utente corrente
     user_stats = {
         'my_annotations': CellAnnotation.query.filter_by(user_id=current_user.id).count(),
         'my_files': ExcelFile.query.filter_by(uploaded_by=current_user.id).count(),
     }
-    
-    # Annotazioni recenti dell'utente
+
+    any_files = ExcelFile.query.count() > 0
+    any_questions_defined = TextCell.query.filter(TextCell.question_type.isnot(None)).count() > 0
+    any_labels = Label.query.count() > 0
+    user_has_annotations = user_stats['my_annotations'] > 0
+    any_ai_reviewed = CellAnnotation.query.filter_by(
+        is_ai_generated=True, status='accepted'
+    ).count() > 0
+
+    completed_steps = []
+    if any_files: completed_steps.append(1)
+    if any_questions_defined: completed_steps.append(2)
+    if any_labels: completed_steps.append(3)
+    if user_has_annotations: completed_steps.append(4)
+    if any_ai_reviewed: completed_steps.append(5)
+
+    next_step = 1
+    for s in (1, 2, 3, 4, 5, 6):
+        if s not in completed_steps:
+            next_step = s
+            break
+    else:
+        next_step = 6
+
     recent_annotations = db.session.query(CellAnnotation, TextCell, Label)\
         .join(TextCell)\
         .join(Label)\
@@ -58,7 +79,13 @@ def dashboard():
         .order_by(CellAnnotation.created_at.desc())\
         .limit(10)\
         .all()
-    
-    return render_template('main/dashboard.html', 
+
+    last_file = ExcelFile.query.filter_by(uploaded_by=current_user.id)\
+        .order_by(ExcelFile.uploaded_at.desc()).first()
+
+    return render_template('main/dashboard.html',
                          user_stats=user_stats,
+                         completed_steps=completed_steps,
+                         next_step=next_step,
+                         last_file=last_file,
                          recent_annotations=recent_annotations)

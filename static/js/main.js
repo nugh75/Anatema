@@ -13,6 +13,8 @@ document.addEventListener('DOMContentLoaded', function() {
         return new bootstrap.Popover(popoverTriggerEl);
     });
 
+    applyAutoContrast();
+
     // Auto-hide alerts dopo 5 secondi
     const alerts = document.querySelectorAll('.alert:not(.alert-permanent)');
     alerts.forEach(alert => {
@@ -236,7 +238,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const pendingCountElem = document.getElementById('pending-count');
     const aiCountElem = document.getElementById('ai-annotations-count');
     
-    if (generateBtn) {
+    if (generateBtn && generateBtn.dataset.customAiHandler !== 'true') {
         const fileId = generateBtn.dataset.fileId;
         const progressDiv = document.getElementById('ai-progress');
         const progressBar = progressDiv ? progressDiv.querySelector('.progress-bar') : null;
@@ -522,6 +524,63 @@ function formatDate(date, options = {}) {
 }
 
 /**
+ * Parsing di un colore CSS rgb/rgba
+ */
+function parseRgbColor(color) {
+    const match = color && color.match(/^rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)$/i);
+    if (!match) {
+        return null;
+    }
+
+    return {
+        r: parseInt(match[1], 10),
+        g: parseInt(match[2], 10),
+        b: parseInt(match[3], 10),
+        a: match[4] === undefined ? 1 : parseFloat(match[4])
+    };
+}
+
+/**
+ * Luminanza relativa per valutare il contrasto
+ */
+function getRelativeLuminance({ r, g, b }) {
+    const normalize = (value) => {
+        const channel = value / 255;
+        return channel <= 0.03928
+            ? channel / 12.92
+            : Math.pow((channel + 0.055) / 1.055, 2.4);
+    };
+
+    const red = normalize(r);
+    const green = normalize(g);
+    const blue = normalize(b);
+
+    return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+}
+
+/**
+ * Applica testo scuro a badge/etichette con sfondo dinamico troppo chiaro
+ */
+function applyAutoContrast(root = document) {
+    const elements = root.querySelectorAll(
+        '.label-display, .label-badge, .badge[style*="background-color"], .badge[style*="background:"]'
+    );
+
+    elements.forEach((element) => {
+        const background = window.getComputedStyle(element).backgroundColor;
+        const parsed = parseRgbColor(background);
+
+        if (!parsed || parsed.a === 0) {
+            element.classList.remove('has-light-background');
+            return;
+        }
+
+        const isLight = getRelativeLuminance(parsed) >= 0.6;
+        element.classList.toggle('has-light-background', isLight);
+    });
+}
+
+/**
  * Ottiene il token CSRF
  */
 function getCSRFToken() {
@@ -578,6 +637,7 @@ window.AnalisiMU = {
     showToast,
     showLoading,
     hideLoading,
+    applyAutoContrast,
     debounce,
     formatDate,
     getCSRFToken,

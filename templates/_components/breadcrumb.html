@@ -1,0 +1,24 @@
+{#
+  Breadcrumb macro.
+  Usage:
+    {% from "_components/breadcrumb.html" import render_breadcrumb %}
+    {{ render_breadcrumb([
+        ('Home', url_for('main.dashboard')),
+        ('Documenti', url_for('excel.list_files')),
+        ('File XYZ', None)
+    ]) }}
+  Last item with url=None is rendered as current (non-link).
+#}
+{% macro render_breadcrumb(items) %}
+<nav aria-label="breadcrumb" class="app-breadcrumb">
+  <ol class="breadcrumb mb-0">
+    {% for label, url in items %}
+      {% if loop.last or not url %}
+        <li class="breadcrumb-item active" aria-current="page">{{ label }}</li>
+      {% else %}
+        <li class="breadcrumb-item"><a href="{{ url }}">{{ label }}</a></li>
+      {% endif %}
+    {% endfor %}
+  </ol>
+</nav>
+{% endmacro %}

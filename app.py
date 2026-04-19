@@ -8,6 +8,7 @@ from flask import Flask
 from flask_login import LoginManager
 from flask_wtf.csrf import CSRFProtect
 import os
+from sqlalchemy import inspect, text
 
 # Importa l'istanza db dai modelli
 from models import db
@@ -143,8 +144,33 @@ def create_app():
     # Creazione delle tabelle del database
     with app.app_context():
         from models import (User, Label, ExcelFile, TextCell, CellAnnotation, 
-                           TextDocument, TextAnnotation)
+                           TextDocument, TextAnnotation, Category,
+                           TaxonomyAlias, TaxonomyMergeAudit)
         db.create_all()
+
+        # Migrazione leggera backward-compatible per campi tassonomia aggiunti su DB esistenti
+        def ensure_taxonomy_schema():
+            inspector = inspect(db.engine)
+
+            def has_column(table_name, column_name):
+                cols = [col['name'] for col in inspector.get_columns(table_name)]
+                return column_name in cols
+
+            # Label.merged_into_label_id
+            if not has_column('label', 'merged_into_label_id'):
+                db.session.execute(text("ALTER TABLE label ADD COLUMN merged_into_label_id INTEGER"))
+                db.session.commit()
+
+            # Category.merged_into_category_id
+            inspector = inspect(db.engine)
+            if not has_column('category', 'merged_into_category_id'):
+                db.session.execute(text("ALTER TABLE category ADD COLUMN merged_into_category_id INTEGER"))
+                db.session.commit()
+
+            # Crea eventuali tabelle nuove mancanti
+            db.create_all()
+
+        ensure_taxonomy_schema()
         
         # Creazione utente admin di default se non esiste
         admin = User.query.filter_by(username='admin').first()
@@ -154,69 +180,87 @@ def create_app():
             db.session.add(admin)
             db.session.commit()
         
-        # Creazione etichette di default se non esistono
+        # Creazione categorie e etichette di default se non esistono
         if Label.query.count() == 0:
-            default_labels = [
-                # Categoria: Prospettiva
-                Label(name='Studente', description='Punto di vista dello studente', category='Prospettiva', color='#007bff'),
-                Label(name='Insegnante', description='Punto di vista del docente', category='Prospettiva', color='#28a745'),
-                Label(name='Istituzione', description='Prospettiva istituzionale', category='Prospettiva', color='#6f42c1'),
-                Label(name='Genitore', description='Punto di vista dei genitori', category='Prospettiva', color='#fd7e14'),
-                
-                # Categoria: Sentiment
-                Label(name='Positivo', description='Atteggiamento favorevole verso l\'AI', category='Sentiment', color='#20c997'),
-                Label(name='Negativo', description='Atteggiamento contrario all\'AI', category='Sentiment', color='#dc3545'),
-                Label(name='Neutro', description='Posizione neutra/equilibrata', category='Sentiment', color='#6c757d'),
-                Label(name='Ambivalente', description='Posizione con aspetti pro e contro', category='Sentiment', color='#ffc107'),
-                
-                # Categoria: Utilizzo AI
-                Label(name='Ricerca e Studio', description='Uso per ricerche e apprendimento', category='Utilizzo AI', color='#17a2b8'),
-                Label(name='Scrittura', description='Aiuto nella produzione di testi', category='Utilizzo AI', color='#6610f2'),
-                Label(name='Problem Solving', description='Risoluzione di problemi', category='Utilizzo AI', color='#155724'),
-                Label(name='Creatività', description='Usi creativi e artistici', category='Utilizzo AI', color='#e83e8c'),
-                Label(name='Programmazione', description='Coding e sviluppo', category='Utilizzo AI', color='#343a40'),
-                Label(name='Traduzione', description='Traduzione di testi', category='Utilizzo AI', color='#20c997'),
-                Label(name='Tutoring', description='AI come tutor personale', category='Utilizzo AI', color='#004085'),
-                
-                # Categoria: Benefici
-                Label(name='Personalizzazione', description='Apprendimento personalizzato', category='Benefici', color='#32cd32'),
-                Label(name='Accessibilità', description='Miglioramento dell\'accessibilità', category='Benefici', color='#4169e1'),
-                Label(name='Efficienza', description='Risparmio di tempo e risorse', category='Benefici', color='#ffd700'),
-                Label(name='Motivazione', description='Aumento della motivazione', category='Benefici', color='#ff00ff'),
-                Label(name='Feedback Istantaneo', description='Feedback immediato', category='Benefici', color='#00ffff'),
-                Label(name='Inclusività', description='Supporto a diversi stili di apprendimento', category='Benefici', color='#e6e6fa'),
-                
-                # Categoria: Rischi e Preoccupazioni
-                Label(name='Dipendenza', description='Eccessiva dipendenza dall\'AI', category='Rischi e Preoccupazioni', color='#8b0000'),
-                Label(name='Plagio', description='Questioni di originalità e onestà accademica', category='Rischi e Preoccupazioni', color='#8b4513'),
-                Label(name='Perdita Competenze', description='Perdita di abilità fondamentali', category='Rischi e Preoccupazioni', color='#2f4f4f'),
-                Label(name='Privacy', description='Preoccupazioni sulla privacy dei dati', category='Rischi e Preoccupazioni', color='#4b0082'),
-                Label(name='Bias', description='Pregiudizi negli algoritmi', category='Rischi e Preoccupazioni', color='#ff4500'),
-                Label(name='Superficialità', description='Apprendimento superficiale', category='Rischi e Preoccupazioni', color='#f5f5dc'),
-                
-                # Categoria: Aspetti Etici
-                Label(name='Trasparenza', description='Necessità di trasparenza nell\'uso', category='Aspetti Etici', color='#b0e0e6'),
-                Label(name='Equità', description='Equità nell\'accesso e utilizzo', category='Aspetti Etici', color='#9acd32'),
-                Label(name='Responsabilità', description='Responsabilità nell\'uso dell\'AI', category='Aspetti Etici', color='#800020'),
-                Label(name='Consenso Informato', description='Consenso consapevole', category='Aspetti Etici', color='#b0c4de'),
-                
-                # Categoria: Regolamentazione
-                Label(name='Necessità Linee Guida', description='Serve regolamentazione', category='Regolamentazione', color='#000080'),
-                Label(name='Divieti', description='Cose da vietare', category='Regolamentazione', color='#dc143c'),
-                Label(name='Formazione Necessaria', description='Necessità di formazione', category='Regolamentazione', color='#808000'),
-                Label(name='Controllo Qualità', description='Controllo della qualità', category='Regolamentazione', color='#c0c0c0'),
-                
-                # Categoria: Ambito Disciplinare
-                Label(name='STEM', description='Scienze, Tecnologia, Ingegneria, Matematica', category='Ambito Disciplinare', color='#0080ff'),
-                Label(name='Umanistico', description='Materie umanistiche', category='Ambito Disciplinare', color='#b22222'),
-                Label(name='Linguistico', description='Lingue straniere', category='Ambito Disciplinare', color='#228b22'),
-                Label(name='Artistico', description='Arte e creatività', category='Ambito Disciplinare', color='#da70d6'),
-                Label(name='Sociale', description='Scienze sociali', category='Ambito Disciplinare', color='#d2691e'),
+            # Dati seed: categoria -> (descrizione, colore, [(nome_etichetta, descrizione, colore)])
+            seed_data = [
+                ('Prospettiva', 'Punto di vista espresso nella risposta', '#6f42c1', [
+                    ('Studente', 'Punto di vista dello studente', '#007bff'),
+                    ('Insegnante', 'Punto di vista del docente', '#28a745'),
+                    ('Istituzione', 'Prospettiva istituzionale', '#6f42c1'),
+                    ('Genitore', 'Punto di vista dei genitori', '#fd7e14'),
+                ]),
+                ('Sentiment', 'Tono emotivo o atteggiamento verso l\'AI', '#ffc107', [
+                    ('Positivo', 'Atteggiamento favorevole verso l\'AI', '#20c997'),
+                    ('Negativo', 'Atteggiamento contrario all\'AI', '#dc3545'),
+                    ('Neutro', 'Posizione neutra/equilibrata', '#6c757d'),
+                    ('Ambivalente', 'Posizione con aspetti pro e contro', '#ffc107'),
+                ]),
+                ('Utilizzo AI', 'Modalità d\'uso dell\'intelligenza artificiale', '#17a2b8', [
+                    ('Ricerca e Studio', 'Uso per ricerche e apprendimento', '#17a2b8'),
+                    ('Scrittura', 'Aiuto nella produzione di testi', '#6610f2'),
+                    ('Problem Solving', 'Risoluzione di problemi', '#155724'),
+                    ('Creatività', 'Usi creativi e artistici', '#e83e8c'),
+                    ('Programmazione', 'Coding e sviluppo', '#343a40'),
+                    ('Traduzione', 'Traduzione di testi', '#20c997'),
+                    ('Tutoring', 'AI come tutor personale', '#004085'),
+                ]),
+                ('Benefici', 'Vantaggi e aspetti positivi dell\'AI nell\'educazione', '#32cd32', [
+                    ('Personalizzazione', 'Apprendimento personalizzato', '#32cd32'),
+                    ('Accessibilità', 'Miglioramento dell\'accessibilità', '#4169e1'),
+                    ('Efficienza', 'Risparmio di tempo e risorse', '#ffd700'),
+                    ('Motivazione', 'Aumento della motivazione', '#ff00ff'),
+                    ('Feedback Istantaneo', 'Feedback immediato agli studenti', '#00ffff'),
+                    ('Inclusività', 'Supporto a diversi stili di apprendimento', '#e6e6fa'),
+                ]),
+                ('Rischi e Preoccupazioni', 'Rischi, limiti e preoccupazioni sull\'uso dell\'AI', '#dc3545', [
+                    ('Dipendenza', 'Eccessiva dipendenza dall\'AI', '#8b0000'),
+                    ('Plagio', 'Questioni di originalità e onestà accademica', '#8b4513'),
+                    ('Perdita Competenze', 'Perdita di abilità fondamentali', '#2f4f4f'),
+                    ('Privacy', 'Preoccupazioni sulla privacy dei dati', '#4b0082'),
+                    ('Bias', 'Pregiudizi e distorsioni negli algoritmi', '#ff4500'),
+                    ('Superficialità', 'Rischio di apprendimento superficiale', '#f5f5dc'),
+                ]),
+                ('Aspetti Etici', 'Considerazioni etiche legate all\'AI in ambito educativo', '#9acd32', [
+                    ('Trasparenza', 'Necessità di trasparenza nell\'uso dell\'AI', '#b0e0e6'),
+                    ('Equità', 'Equità nell\'accesso e utilizzo', '#9acd32'),
+                    ('Responsabilità', 'Responsabilità nell\'uso dell\'AI', '#800020'),
+                    ('Consenso Informato', 'Necessità di consenso consapevole', '#b0c4de'),
+                ]),
+                ('Regolamentazione', 'Proposte e bisogni di regole e linee guida', '#000080', [
+                    ('Necessità Linee Guida', 'Richiesta di regolamentazione chiara', '#000080'),
+                    ('Divieti', 'Indicazione di usi da vietare', '#dc143c'),
+                    ('Formazione Necessaria', 'Necessità di formazione specifica', '#808000'),
+                    ('Controllo Qualità', 'Necessità di controllo sulla qualità dei contenuti AI', '#c0c0c0'),
+                ]),
+                ('Ambito Disciplinare', 'Area disciplinare di riferimento della risposta', '#0080ff', [
+                    ('STEM', 'Scienze, Tecnologia, Ingegneria, Matematica', '#0080ff'),
+                    ('Umanistico', 'Materie umanistiche', '#b22222'),
+                    ('Linguistico', 'Lingue straniere', '#228b22'),
+                    ('Artistico', 'Arte e creatività', '#da70d6'),
+                    ('Sociale', 'Scienze sociali', '#d2691e'),
+                ]),
             ]
-            
-            for label in default_labels:
-                db.session.add(label)
-            
+
+            for cat_name, cat_desc, cat_color, labels_def in seed_data:
+                # Crea la categoria se non esiste
+                cat = Category.query.filter_by(name=cat_name).first()
+                if not cat:
+                    cat = Category(name=cat_name, description=cat_desc, color=cat_color, is_active=True)
+                    db.session.add(cat)
+                    db.session.flush()  # ottieni l'ID prima di usarlo
+
+                for lbl_name, lbl_desc, lbl_color in labels_def:
+                    if not Label.query.filter_by(name=lbl_name).first():
+                        db.session.add(Label(
+                            name=lbl_name,
+                            description=lbl_desc,
+                            category=cat_name,       # campo legacy per retrocompatibilità
+                            category_id=cat.id,      # FK corretto
+                            color=lbl_color,
+                            is_active=True,
+                        ))
+
             db.session.commit()
     
     return app

@@ -1,25 +1,31 @@
 {% extends "base.html" %}
+{% from "_components/breadcrumb.html" import render_breadcrumb %}
+{% from "_components/page_header.html" import render_page_header %}
 
-{% block title %}Dashboard AI -Anatema{% endblock %}
+{% block title %}Revisione AI - Anatema{% endblock %}
+
+{% block breadcrumb %}
+{{ render_breadcrumb([
+    ('Home', url_for('main.dashboard')),
+    ('Revisione AI', None)
+]) }}
+{% endblock %}
+
+{% block page_header %}
+{{ render_page_header(
+    title='Revisione AI',
+    subtitle='Genera annotazioni con AI e revisiona i suggerimenti',
+    icon='bi-robot',
+    step_num=5,
+    help_text='L\'AI produce annotazioni in stato "pending_review". Accetta o rifiuta i suggerimenti prima che diventino definitivi.',
+    actions=[
+      {'label': 'Aggiorna', 'url': '#', 'icon': 'bi-arrow-clockwise', 'style': 'outline-primary'}
+    ]
+) }}
+<script>document.querySelector('.page-header__actions a[href="#"]').addEventListener('click', function(e){e.preventDefault(); if (typeof refreshAIStats==='function') refreshAIStats();});</script>
+{% endblock %}
 
 {% block content %}
-<div class="row mb-4">
-    <div class="col-12">
-        <div class="d-flex justify-content-between align-items-center">
-            <div>
-                <h2>
-                    <i class="bi bi-robot me-2"></i>Dashboard AI
-                </h2>
-                <p class="text-muted">Gestione e monitoraggio dell'intelligenza artificiale</p>
-            </div>
-            <div>
-                <button class="btn btn-primary" onclick="refreshAIStats()">
-                    <i class="bi bi-arrow-clockwise me-1"></i>Aggiorna
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
 
 <!-- Statistiche generali -->
 <div class="row mb-4">

@@ -1,0 +1,41 @@
+{#
+  Workflow stepper — 6 passi orizzontali.
+  Usage:
+    {% from "_components/workflow_stepper.html" import render_stepper %}
+    {{ render_stepper(active_step=3) }}
+    {{ render_stepper(active_step=4, completed_steps=[1,2,3]) }}
+  active_step     — 1..6 step corrente (evidenziato primary)
+  completed_steps — lista di step completati (success)
+#}
+{% macro render_stepper(active_step=1, completed_steps=None) %}
+{% set completed_steps = completed_steps or [] %}
+{% set steps = [
+    (1, 'Documenti',    'bi-file-earmark-excel', url_for('excel.list_files')),
+    (2, 'Domande',      'bi-patch-question',     url_for('questions.manage_questions')),
+    (3, 'Etichette',    'bi-tags',               url_for('labels.list_labels')),
+    (4, 'Annotazione',  'bi-pencil-square',      url_for('annotation.browse_annotations')),
+    (5, 'Revisione AI', 'bi-robot',              url_for('ai.ai_dashboard')),
+    (6, 'Statistiche',  'bi-graph-up',           url_for('statistics.overview'))
+] %}
+<ol class="workflow-stepper" role="list">
+  {% for num, label, icon, url in steps %}
+    {% set state = 'future' %}
+    {% if num == active_step %}{% set state = 'current' %}{% endif %}
+    {% if num in completed_steps %}{% set state = 'completed' %}{% endif %}
+    <li class="workflow-step workflow-step--{{ state }}">
+      <a href="{{ url }}" class="workflow-step__link">
+        <span class="workflow-step__badge">
+          {% if state == 'completed' %}
+            <i class="bi bi-check-lg"></i>
+          {% else %}
+            {{ num }}
+          {% endif %}
+        </span>
+        <span class="workflow-step__label">
+          <i class="bi {{ icon }} me-1"></i>{{ label }}
+        </span>
+      </a>
+    </li>
+  {% endfor %}
+</ol>
+{% endmacro %}

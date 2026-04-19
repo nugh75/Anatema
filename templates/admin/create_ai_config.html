@@ -113,7 +113,7 @@
                             <div class="form-group">
                                 <label for="ollama_url">URL Ollama</label>
                                 <input type="url" class="form-control" id="ollama_url" name="ollama_url"
-                                       value="http://192.168.129.14:11435" placeholder="http://192.168.129.14:11435">
+                                       value="http://192.168.129.14:11434" placeholder="http://192.168.129.14:11434">
                                 <div class="form-help">URL dell'istanza Ollama (include porta)</div>
                             </div>
                             
@@ -130,9 +130,12 @@
                                     {% endfor %}
                                 </select>
                                 <div class="form-help">Scegli un modello installato su Ollama</div>
-                                
-                                <button type="button" class="btn btn-sm btn-outline-primary mt-2" id="test-ollama-connection">
-                                    <i class="fas fa-plug"></i> Testa Connessione
+
+                                <button type="button" class="btn btn-sm btn-outline-primary mt-2" id="refresh-ollama-models">
+                                    <i class="fas fa-arrows-rotate"></i> Carica Modelli Da Ollama
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-success mt-2 ms-1" id="test-ollama-connection">
+                                    <i class="fas fa-plug"></i> Testa Modello
                                 </button>
                                 
                                 <div id="ollama-test-result" class="mt-2"></div>
@@ -252,76 +255,101 @@ document.addEventListener('DOMContentLoaded', function() {
     const providerSelect = document.getElementById('provider');
     const ollamaSection = document.getElementById('ollama-section');
     const openrouterSection = document.getElementById('openrouter-section');
+    const ollamaUrlInput = document.getElementById('ollama_url');
+    const ollamaModelSelect = document.getElementById('ollama_model');
+    const ollamaResultDiv = document.getElementById('ollama-test-result');
+    const refreshModelsBtn = document.getElementById('refresh-ollama-models');
+    const testOllamaBtn = document.getElementById('test-ollama-connection');
+    const testOpenrouterBtn = document.getElementById('test-openrouter-connection');
     
     // Gestione cambio provider
-    providerSelect.addEventListener('change', function() {
+    function toggleProviderSections() {
         ollamaSection.classList.remove('active');
         openrouterSection.classList.remove('active');
         
-        if (this.value === 'ollama') {
+        if (providerSelect.value === 'ollama') {
             ollamaSection.classList.add('active');
-        } else if (this.value === 'openrouter') {
+            loadOllamaModels(true);
+        } else if (providerSelect.value === 'openrouter') {
             openrouterSection.classList.add('active');
         }
-    });
-    
-    // Test connessione Ollama
-    document.getElementById('test-ollama-connection').addEventListener('click', function() {
-        const url = document.getElementById('ollama_url').value;
-        if (!url) {
-            alert('Inserisci prima l\'URL di Ollama');
+    }
+    providerSelect.addEventListener('change', toggleProviderSections);
+
+    async function loadOllamaModels(showMessage = false) {
+        const ollamaUrl = ollamaUrlInput.value.trim();
+        if (!ollamaUrl) {
+            if (showMessage) {
+                ollamaResultDiv.className = 'test-result test-error mt-2';
+                ollamaResultDiv.textContent = 'Inserisci prima l\'URL di Ollama.';
+                ollamaResultDiv.style.display = 'block';
+            }
             return;
         }
-        
-        this.disabled = true;
-        this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testando...';
-        
-        // Simula test connessione (implementare chiamata reale)
-        setTimeout(() => {
-            const modelsList = document.getElementById('ollama-models-list');
-            modelsList.innerHTML = `
-                <div class="model-option">
-                    <label><input type="radio" name="selected_model" value="llama3"> llama3</label>
-                </div>
-                <div class="model-option">
-                    <label><input type="radio" name="selected_model" value="mistral"> mistral</label>
-                </div>
-                <div class="model-option">
-                    <label><input type="radio" name="selected_model" value="gemma"> gemma</label>
-                </div>
-            `;
-            modelsList.style.display = 'block';
-            
-            // Gestisci selezione modello
-            modelsList.addEventListener('change', function(e) {
-                if (e.target.type === 'radio') {
-                    document.getElementById('ollama_model').value = e.target.value;
-                }
+
+        const previousSelection = ollamaModelSelect.value;
+        refreshModelsBtn.disabled = true;
+        refreshModelsBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Caricamento...';
+
+        try {
+            const response = await fetch(`/admin/ollama/models/live?url=${encodeURIComponent(ollamaUrl)}`);
+            const data = await response.json();
+
+            if (!response.ok || !data.success) {
+                throw new Error(data.message || 'Errore nel caricamento modelli');
+            }
+
+            ollamaModelSelect.innerHTML = '<option value="">Seleziona un modello...</option>';
+            data.models.forEach(model => {
+                const option = document.createElement('option');
+                option.value = model.full_name;
+                const details = [model.size_human];
+                if (model.parameter_size) details.push(model.parameter_size);
+                if (model.quantization_level) details.push(model.quantization_level);
+                option.textContent = `${model.full_name} (${details.join(' - ')})`;
+                ollamaModelSelect.appendChild(option);
             });
-            
-            this.disabled = false;
-            this.innerHTML = '<i class="fas fa-check"></i> Connesso! Modelli caricati';
-            this.className = 'btn btn-sm btn-success mt-2';
-        }, 2000);
+
+            if (previousSelection && Array.from(ollamaModelSelect.options).some(opt => opt.value === previousSelection)) {
+                ollamaModelSelect.value = previousSelection;
+            } else if (data.models.length > 0) {
+                ollamaModelSelect.value = data.models[0].full_name;
+            }
+
+            if (showMessage) {
+                ollamaResultDiv.className = 'test-result test-success mt-2';
+                ollamaResultDiv.textContent = `Connessione OK. Modelli caricati: ${data.count}.`;
+                ollamaResultDiv.style.display = 'block';
+            }
+        } catch (error) {
+            if (showMessage) {
+                ollamaResultDiv.className = 'test-result test-error mt-2';
+                ollamaResultDiv.textContent = `Errore caricamento modelli: ${error.message}`;
+                ollamaResultDiv.style.display = 'block';
+            }
+        } finally {
+            refreshModelsBtn.disabled = false;
+            refreshModelsBtn.innerHTML = '<i class="fas fa-arrows-rotate"></i> Carica Modelli Da Ollama';
+        }
+    }
+
+    refreshModelsBtn.addEventListener('click', function() {
+        loadOllamaModels(true);
     });
-    
-    // Test connessione OpenRouter
-    document.getElementById('test-openrouter-connection').addEventListener('click', function() {
-        const apiKey = document.getElementById('openrouter_api_key').value;
-        if (!apiKey) {
-            alert('Inserisci prima l\'API key');
+
+    testOllamaBtn.addEventListener('click', async function() {
+        const model = ollamaModelSelect.value;
+        if (!ollamaUrlInput.value.trim() || !model) {
+            alert('Compila URL e modello per Ollama');
             return;
         }
-        
-        this.disabled = true;
-        this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testando...';
-        
-        // Simula test connessione (implementare chiamata reale)
-        setTimeout(() => {
-            this.disabled = false;
-            this.innerHTML = '<i class="fas fa-check"></i> API Key valida!';
-            this.className = 'btn btn-sm btn-success mt-2';
-        }, 1500);
+        await loadOllamaModels(false);
+        document.getElementById('test-config-btn').click();
+    });
+
+    // Manteniamo un feedback minimo anche su OpenRouter
+    testOpenrouterBtn.addEventListener('click', function() {
+        document.getElementById('test-config-btn').click();
     });
     
     // Test configurazione
@@ -417,6 +445,9 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
     });
+
+    // Stato iniziale
+    toggleProviderSections();
 });
 </script>
 {% endblock %}

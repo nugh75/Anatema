@@ -1,21 +1,30 @@
 {% extends "base.html" %}
+{% from "_components/breadcrumb.html" import render_breadcrumb %}
+{% from "_components/page_header.html" import render_page_header %}
 
-{% block title %}Merge Etichette{% endblock %}
+{% block title %}Merge Etichette - Anatema{% endblock %}
+
+{% block breadcrumb %}
+{{ render_breadcrumb([
+    ('Home', url_for('main.dashboard')),
+    ('Etichette', url_for('labels.list_labels')),
+    ('Merge', None)
+]) }}
+{% endblock %}
+
+{% block page_header %}
+{{ render_page_header(
+    title='Merge Etichette',
+    subtitle='Unisci etichette duplicate o simili',
+    icon='bi-arrow-down-up',
+    step_num=3
+) }}
+{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
     <div class="row">
         <div class="col-12">
-            <div class="d-flex justify-content-between align-items-center mb-4">
-                <h2>
-                    <i class="fas fa-code-branch"></i>
-                    Merge Etichette
-                </h2>
-                <a href="{{ url_for('labels.list_labels') }}" class="btn btn-secondary">
-                    <i class="fas fa-arrow-left"></i>
-                    Torna alla Lista
-                </a>
-            </div>
 
             <div class="card">
                 <div class="card-header">
@@ -29,12 +38,34 @@
                         <i class="fas fa-lightbulb"></i>
                         <strong>Come funziona il merge:</strong>
                         <ul class="mb-0 mt-2">
-                            <li>Seleziona una o più etichette di <strong>origine</strong> (che verranno eliminate)</li>
+                            <li>Seleziona una o più etichette di <strong>origine</strong> (che verranno deprecate)</li>
                             <li>Seleziona un'etichetta di <strong>destinazione</strong> (che rimarrà)</li>
                             <li>Tutte le annotazioni delle etichette di origine verranno trasferite a quella di destinazione</li>
-                            <li>Le etichette di origine verranno eliminate definitivamente</li>
+                            <li>I duplicati annotazione su chiave `(text_cell_id, label_id, user_id, status)` verranno deduplicati automaticamente</li>
+                            <li>Le etichette sorgente restano nello storico come deprecate (con audit)</li>
                         </ul>
                     </div>
+
+                    {% if suggestions %}
+                    <div class="alert alert-secondary">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <strong><i class="fas fa-magic me-1"></i>Suggerimenti automatici</strong>
+                            <span class="badge bg-primary">{{ suggestions|length }} candidati</span>
+                        </div>
+                        <div class="mt-2">
+                            {% for suggestion in suggestions %}
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-primary me-2 mb-2 apply-suggestion-btn"
+                                    data-target-id="{{ suggestion.target.id }}"
+                                    data-source-ids="{{ suggestion.sources|map(attribute='id')|list|tojson }}">
+                                {{ suggestion.target.name }} <=
+                                {% for source in suggestion.sources %}{{ source.name }}{% if not loop.last %}, {% endif %}{% endfor %}
+                                (score {{ suggestion.score }})
+                            </button>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
 
                     <form method="POST">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
@@ -43,7 +74,7 @@
                             <div class="col-md-6">
                                 <h5 class="text-danger">
                                     <i class="fas fa-minus-circle"></i>
-                                    Etichette di Origine (da eliminare)
+                                    Etichette di Origine (da deprecare)
                                 </h5>
                                 <div class="border rounded p-3" style="max-height: 400px; overflow-y: auto;">
                                     {% for category, labels in labels_by_category.items() %}
@@ -124,6 +155,12 @@
                         </div>
 
                         <div class="text-center mt-4">
+                            <div class="form-check d-inline-block me-3">
+                                <input class="form-check-input" type="checkbox" name="dry_run" value="true" id="dry_run_mode">
+                                <label class="form-check-label" for="dry_run_mode">
+                                    Esegui solo dry-run (nessuna modifica)
+                                </label>
+                            </div>
                             <button type="submit" class="btn btn-danger btn-lg" id="merge-btn" disabled>
                                 <i class="fas fa-code-branch"></i>
                                 Esegui Merge
@@ -169,10 +206,11 @@ document.addEventListener('DOMContentLoaded', function() {
             previewContent.innerHTML = `
                 <p><strong>Azioni che verranno eseguite:</strong></p>
                 <ul>
-                    <li>Le etichette ${sourceNames.join(', ')} verranno <strong class="text-danger">eliminate</strong></li>
-                    <li>Tutte le loro annotazioni verranno trasferite a <strong class="text-success">${targetName}</strong> (${targetCount})</li>
+                    <li>Le etichette ${sourceNames.join(', ')} verranno <strong class="text-danger">deprecate</strong></li>
+                    <li>Tutte le loro annotazioni verranno migrate a <strong class="text-success">${targetName}</strong> (${targetCount})</li>
+                    <li>Eventuali duplicati verranno deduplicati automaticamente</li>
                 </ul>
-                <p class="mb-0"><strong class="text-warning">Attenzione:</strong> Questa operazione non può essere annullata!</p>
+                <p class="mb-0"><strong class="text-warning">Nota:</strong> l'operazione è tracciata in audit e preserva lo storico.</p>
             `;
         } else {
             mergeBtn.disabled = true;
@@ -206,6 +244,21 @@ document.addEventListener('DOMContentLoaded', function() {
                     updatePreview();
                 }
             }
+        });
+    });
+
+    document.querySelectorAll('.apply-suggestion-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const targetId = String(this.dataset.targetId);
+            const sourceIds = JSON.parse(this.dataset.sourceIds || '[]').map(String);
+
+            sourceLabels.forEach(cb => {
+                cb.checked = sourceIds.includes(cb.value);
+            });
+            targetLabels.forEach(rb => {
+                rb.checked = (rb.value === targetId);
+            });
+            updatePreview();
         });
     });
 });

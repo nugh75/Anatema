@@ -699,7 +699,7 @@ def get_file_label_statistics():
         label_stats = db.session.query(
             Label.name,
             func.coalesce(Category.color, Label.color).label('color'),
-            Label.category,
+            func.coalesce(Category.name, Label.category, 'Senza categoria').label('category'),
             db.func.count(CellAnnotation.id).label('count')
         ).select_from(Label)\
          .join(CellAnnotation, Label.id == CellAnnotation.label_id)\
@@ -711,14 +711,16 @@ def get_file_label_statistics():
          .all()
         
         # Statistiche per categoria in questo file
+        # Usa il nome dalla Category FK; fallback al campo legacy per etichette non migrate
         category_stats = db.session.query(
-            Label.category,
+            db.func.coalesce(Category.name, Label.category, 'Senza categoria').label('category'),
             db.func.count(CellAnnotation.id).label('count')
         ).select_from(Label)\
          .join(CellAnnotation, Label.id == CellAnnotation.label_id)\
          .join(TextCell, CellAnnotation.text_cell_id == TextCell.id)\
+         .outerjoin(Category, Label.category_id == Category.id)\
          .filter(TextCell.excel_file_id == file.id)\
-         .group_by(Label.category)\
+         .group_by(db.func.coalesce(Category.name, Label.category, 'Senza categoria'))\
          .order_by(db.desc('count'))\
          .all()
         

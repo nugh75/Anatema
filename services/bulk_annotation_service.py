@@ -1,9 +1,5 @@
 """
-Servizio per l'annotazione ba        # Query base per le celle del quesito
-        query = TextCell.query.filter_by(
-            excel_file_id=file_id,
-            column_name=question  # Corretto: usa column_name invece di question_name
-        )I con template di prompt
+Servizio per l'annotazione batch di celle con template di prompt
 """
 
 import json
@@ -100,7 +96,7 @@ class BulkAnnotationService:
             text = cell.text_content[:500] if len(cell.text_content) > 500 else cell.text_content
             content_lines.append(f"Risposta {i} (ID: {cell.id}): {text}")
         
-        return "\\n".join(content_lines)
+        return "\n".join(content_lines)
     
     def preview_annotation_job(self, file_id: int, question: str, template_id: int, 
                              config_id: int, options: Dict[str, Any]) -> Dict[str, Any]:
@@ -151,8 +147,9 @@ class BulkAnnotationService:
             ]
         }
     
-    def execute_bulk_annotation(self, file_id: int, question: str, template_id: int, 
-                              config_id: int, options: Dict[str, Any]) -> Dict[str, Any]:
+    def execute_bulk_annotation(self, file_id: int, question: str, template_id: int,
+                              config_id: int, options: Dict[str, Any],
+                              user_id: int = 1) -> Dict[str, Any]:
         """
         Esegue l'annotazione batch
         
@@ -201,7 +198,7 @@ class BulkAnnotationService:
             
             # Crea le annotazioni nel database
             created_annotations = self.create_annotations_from_ai_response(
-                parsed_annotations, cells, template_id, config_id
+                parsed_annotations, cells, template_id, config_id, user_id
             )
             
             return {
@@ -218,32 +215,44 @@ class BulkAnnotationService:
     def parse_ai_response(self, ai_response: str) -> Optional[List[Dict[str, Any]]]:
         """
         Parsa la risposta dell'AI in formato JSON
-        
+
         Returns:
             Lista di annotazioni parsate o None se il parsing fallisce
         """
-        try:
-            # Cerca il JSON nella risposta
-            json_match = re.search(r'\\{.*\\}', ai_response, re.DOTALL)
-            if not json_match:
+        def extract_json_object(text: str) -> Optional[str]:
+            """Estrae il primo oggetto JSON bilanciando le parentesi graffe."""
+            start = text.find('{')
+            if start == -1:
                 return None
-            
-            json_str = json_match.group(0)
+            depth = 0
+            for i, ch in enumerate(text[start:], start):
+                if ch == '{':
+                    depth += 1
+                elif ch == '}':
+                    depth -= 1
+                    if depth == 0:
+                        return text[start:i + 1]
+            return None
+
+        try:
+            json_str = extract_json_object(ai_response)
+            if not json_str:
+                return None
+
             parsed = json.loads(json_str)
-            
-            # Valida la struttura
+
             if 'annotations' not in parsed:
                 return None
-            
+
             return parsed['annotations']
-            
+
         except (json.JSONDecodeError, ValueError) as e:
             print(f"Errore nel parsing JSON: {e}")
             return None
     
-    def create_annotations_from_ai_response(self, annotations_data: List[Dict[str, Any]], 
-                                          cells: List[TextCell], template_id: int, 
-                                          config_id: int) -> List[CellAnnotation]:
+    def create_annotations_from_ai_response(self, annotations_data: List[Dict[str, Any]],
+                                          cells: List[TextCell], template_id: int,
+                                          config_id: int, user_id: int = 1) -> List[CellAnnotation]:
         """
         Crea le annotazioni nel database dalla risposta AI
         
@@ -278,24 +287,22 @@ class BulkAnnotationService:
                     if not label_name:
                         continue
                     
-                    # Trova o crea l'etichetta
-                    label = Label.query.filter_by(name=label_name).first()
+                    # Usa solo etichette canoniche attive (niente creazione automatica tassonomia)
+                    label = Label.query.filter(
+                        Label.name == label_name,
+                        Label.is_active == True,  # noqa: E712
+                        Label.merged_into_label_id.is_(None)
+                    ).first()
                     if not label:
-                        # Crea etichetta se non esiste
-                        label = Label(
-                            name=label_name,
-                            description=f"Etichetta generata automaticamente da AI",
-                            category='AI Generated',
-                            color='#6c757d'
-                        )
-                        db.session.add(label)
-                        db.session.flush()
+                        continue
+                    if label.category_obj and (not label.category_obj.is_active or label.category_obj.merged_into_category_id is not None):
+                        continue
                     
                     # Crea l'annotazione
                     annotation = CellAnnotation(
                         text_cell_id=response_id,
                         label_id=label.id,
-                        user_id=1,  # TODO: Usare l'ID dell'utente corrente
+                        user_id=user_id,
                         is_ai_generated=True,
                         ai_confidence=confidence,
                         ai_reasoning=reasoning,

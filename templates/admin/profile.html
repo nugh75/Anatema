@@ -1,6 +1,23 @@
 {% extends "base.html" %}
+{% from "_components/breadcrumb.html" import render_breadcrumb %}
+{% from "_components/page_header.html" import render_page_header %}
 
-{% block title %}Il Mio Profilo{% endblock %}
+{% block title %}Profilo - Anatema{% endblock %}
+
+{% block breadcrumb %}
+{{ render_breadcrumb([
+    ('Home', url_for('main.dashboard')),
+    ('Profilo', None)
+]) }}
+{% endblock %}
+
+{% block page_header %}
+{{ render_page_header(
+    title='Il Mio Profilo',
+    subtitle='Informazioni account e preferenze',
+    icon='bi-person-circle'
+) }}
+{% endblock %}
 
 {% block content %}
 <div class="container">

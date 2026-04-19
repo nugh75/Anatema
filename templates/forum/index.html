@@ -1,27 +1,31 @@
 {% extends "base.html" %}
+{% from "_components/breadcrumb.html" import render_breadcrumb %}
+{% from "_components/page_header.html" import render_page_header %}
 
-{% block title %}Forum Annotatori - Anatema{% endblock %}
+{% block title %}Forum - Anatema{% endblock %}
+
+{% block breadcrumb %}
+{{ render_breadcrumb([
+    ('Home', url_for('main.dashboard')),
+    ('Collaborazione', None),
+    ('Forum', None)
+]) }}
+{% endblock %}
+
+{% block page_header %}
+{{ render_page_header(
+    title='Forum Annotatori',
+    subtitle='Discussioni e collaborazione tra annotatori per ogni file Excel',
+    icon='bi-chat-dots',
+    help_text='Uno spazio per discutere dubbi, casi ambigui e decisioni metodologiche con gli altri annotatori.',
+    actions=[
+      {'label': 'Annotazioni', 'url': url_for('annotation.browse_annotations'), 'icon': 'bi-pencil-square', 'style': 'outline-primary'}
+    ]
+) }}
+{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
-    <!-- Header -->
-    <div class="row mb-4">
-        <div class="col-12">
-            <div class="d-flex justify-content-between align-items-center">
-                <div>
-                    <h2 class="mb-1">
-                        <i class="bi bi-chat-dots me-2"></i>Forum Annotatori
-                    </h2>
-                    <p class="text-muted mb-0">Discussioni e collaborazione tra annotatori per ogni file Excel</p>
-                </div>
-                <div>
-                    <a href="{{ url_for('annotation.browse_annotations') }}" class="btn btn-outline-primary">
-                        <i class="bi bi-arrow-left me-1"></i>Torna alle Annotazioni
-                    </a>
-                </div>
-            </div>
-        </div>
-    </div>
 
     {% if files_with_stats %}
     <!-- Lista dei file con forum -->

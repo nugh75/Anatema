@@ -70,8 +70,8 @@
                                     <div class="mb-3">
                                         <label for="ollama_url" class="form-label">URL Server Ollama</label>
                                         <input type="url" class="form-control" id="ollama_url" name="ollama_url" 
-                                               value="{{ config.ollama_url or 'http://192.168.129.14:11435' }}"
-                                               placeholder="http://192.168.129.14:11435">
+                                               value="{{ config.ollama_url or 'http://192.168.129.14:11434' }}"
+                                               placeholder="http://192.168.129.14:11434">
                                         <div class="form-text">URL del server Ollama (include porta)</div>
                                     </div>
                                     
@@ -80,15 +80,24 @@
                                         <select class="form-select" id="ollama_model" name="ollama_model">
                                             <option value="">Seleziona un modello...</option>
                                             {% for model in ollama_models %}
+                                            {% set model_full_name = model.name ~ ':' ~ model.tag %}
                                             <option value="{{ model.name }}:{{ model.tag }}" 
-                                                    {{ 'selected' if config.ollama_model == (model.name + ':' + model.tag) else '' }}
-                                                    data-size="{{ '%.1f'|format(model.size / 1024**3) }} GB">
-                                                {{ model.name }}:{{ model.tag }} 
-                                                ({{ '%.1f'|format(model.size / 1024**3) }} GB)
+                                                    {{ 'selected' if config.ollama_model == model_full_name else '' }}
+                                                    data-size="{{ '%.1f'|format((model.size or 0) / 1024**3) }} GB">
+                                                {{ model_full_name }}
+                                                {% if model.from_config %}
+                                                (configurato)
+                                                {% else %}
+                                                ({{ '%.1f'|format((model.size or 0) / 1024**3) }} GB)
+                                                {% endif %}
                                             </option>
                                             {% endfor %}
                                         </select>
                                         <div class="form-text">Scegli un modello installato su Ollama</div>
+                                        <button type="button" class="btn btn-sm btn-outline-primary mt-2" id="refresh-ollama-models">
+                                            <i class="bi bi-arrow-repeat me-1"></i>Ricarica Modelli Da Ollama
+                                        </button>
+                                        <div id="ollama-models-result" class="mt-2"></div>
                                     </div>
                                 </div>
                             </div>
@@ -214,6 +223,105 @@
 <script>
 // Test configurazione
 document.addEventListener('DOMContentLoaded', function() {
+    const providerSelect = document.getElementById('provider');
+    const ollamaUrlInput = document.getElementById('ollama_url');
+    const ollamaModelSelect = document.getElementById('ollama_model');
+    const refreshModelsBtn = document.getElementById('refresh-ollama-models');
+    const ollamaModelsResult = document.getElementById('ollama-models-result');
+    const configuredModel = {{ (config.ollama_model or '')|tojson }};
+
+    function ensureConfiguredModelOption() {
+        if (!ollamaModelSelect || !configuredModel) return;
+        const exists = Array.from(ollamaModelSelect.options).some(opt => opt.value === configuredModel);
+        if (!exists) {
+            const option = document.createElement('option');
+            option.value = configuredModel;
+            option.textContent = `${configuredModel} (configurato)`;
+            option.selected = true;
+            ollamaModelSelect.appendChild(option);
+        }
+    }
+
+    async function loadOllamaModels(showMessage = false) {
+        if (!ollamaUrlInput || !ollamaModelSelect || !refreshModelsBtn) return;
+        const ollamaUrl = (ollamaUrlInput.value || '').trim();
+        if (!ollamaUrl) {
+            ensureConfiguredModelOption();
+            if (showMessage && ollamaModelsResult) {
+                ollamaModelsResult.className = 'test-result test-error mt-2';
+                ollamaModelsResult.textContent = 'Inserisci prima l\'URL di Ollama.';
+                ollamaModelsResult.style.display = 'block';
+            }
+            return;
+        }
+
+        const previousSelection = ollamaModelSelect.value || configuredModel;
+        refreshModelsBtn.disabled = true;
+        refreshModelsBtn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Caricamento...';
+
+        try {
+            const response = await fetch(`/admin/ollama/models/live?url=${encodeURIComponent(ollamaUrl)}`);
+            const data = await response.json();
+            if (!response.ok || !data.success) {
+                throw new Error(data.message || 'Errore nel caricamento modelli');
+            }
+
+            ollamaModelSelect.innerHTML = '<option value="">Seleziona un modello...</option>';
+            data.models.forEach(model => {
+                const option = document.createElement('option');
+                option.value = model.full_name;
+                const details = [model.size_human];
+                if (model.parameter_size) details.push(model.parameter_size);
+                if (model.quantization_level) details.push(model.quantization_level);
+                option.textContent = `${model.full_name} (${details.join(' - ')})`;
+                ollamaModelSelect.appendChild(option);
+            });
+
+            if (previousSelection && Array.from(ollamaModelSelect.options).some(opt => opt.value === previousSelection)) {
+                ollamaModelSelect.value = previousSelection;
+            } else if (data.models.length > 0) {
+                ollamaModelSelect.value = data.models[0].full_name;
+            } else {
+                ensureConfiguredModelOption();
+            }
+
+            if (showMessage && ollamaModelsResult) {
+                ollamaModelsResult.className = 'test-result test-success mt-2';
+                ollamaModelsResult.textContent = `Connessione OK. Modelli caricati: ${data.count}.`;
+                ollamaModelsResult.style.display = 'block';
+            }
+        } catch (error) {
+            ensureConfiguredModelOption();
+            if (showMessage && ollamaModelsResult) {
+                ollamaModelsResult.className = 'test-result test-error mt-2';
+                ollamaModelsResult.textContent = `Errore caricamento modelli: ${error.message}`;
+                ollamaModelsResult.style.display = 'block';
+            }
+        } finally {
+            refreshModelsBtn.disabled = false;
+            refreshModelsBtn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i>Ricarica Modelli Da Ollama';
+        }
+    }
+
+    if (refreshModelsBtn) {
+        refreshModelsBtn.addEventListener('click', function() {
+            loadOllamaModels(true);
+        });
+    }
+
+    if (providerSelect) {
+        providerSelect.addEventListener('change', function() {
+            if (providerSelect.value === 'ollama') {
+                loadOllamaModels(true);
+            }
+        });
+    }
+
+    // Precarica i modelli quando si lavora su provider Ollama
+    if (document.getElementById('provider').value === 'ollama') {
+        loadOllamaModels(true);
+    }
+
     document.getElementById('test-config-btn').addEventListener('click', function() {
         const configId = {{ config.id }};
         const spinner = this.querySelector('.loading-spinner');
@@ -253,10 +361,12 @@ function toggleProviderSettings() {
     const provider = document.getElementById('provider').value;
     const ollamaSettings = document.getElementById('ollama-settings');
     const openrouterSettings = document.getElementById('openrouter-settings');
+    const ollamaModelsResult = document.getElementById('ollama-models-result');
     
     if (provider === 'ollama') {
         ollamaSettings.style.display = 'block';
         openrouterSettings.style.display = 'none';
+        if (ollamaModelsResult) ollamaModelsResult.style.display = 'none';
     } else if (provider === 'openrouter') {
         ollamaSettings.style.display = 'none';
         openrouterSettings.style.display = 'block';

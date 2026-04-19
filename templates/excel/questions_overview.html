@@ -1,30 +1,31 @@
 {% extends "base.html" %}
+{% from "_components/breadcrumb.html" import render_breadcrumb %}
+{% from "_components/page_header.html" import render_page_header %}
 
-{% block title %}Panoramica Domande - {{ excel_file.original_filename }} -Anatema{% endblock %}
+{% block title %}Panoramica Domande - {{ excel_file.original_filename }} - Anatema{% endblock %}
+
+{% block breadcrumb %}
+{{ render_breadcrumb([
+    ('Home', url_for('main.dashboard')),
+    ('Documenti', url_for('excel.list_files')),
+    (excel_file.original_filename, url_for('excel.view_file', file_id=excel_file.id)),
+    ('Panoramica Domande', None)
+]) }}
+{% endblock %}
+
+{% block page_header %}
+{{ render_page_header(
+    title='Panoramica Domande',
+    subtitle='File: ' ~ excel_file.original_filename,
+    icon='bi-grid-3x3-gap',
+    step_num=2,
+    actions=[
+      {'label': 'Vista Quesiti', 'url': url_for('excel.view_file', file_id=excel_file.id, view='questions'), 'icon': 'bi-list-ul', 'style': 'outline-primary'}
+    ]
+) }}
+{% endblock %}
 
 {% block content %}
-<div class="row mb-4">
-    <div class="col-12">
-        <div class="d-flex justify-content-between align-items-center">
-            <div>
-                <h2>
-                    <i class="bi bi-grid-3x3-gap me-2"></i>Panoramica Domande
-                </h2>
-                <p class="text-muted mb-0">
-                    File: {{ excel_file.original_filename }}
-                </p>
-            </div>
-            <div>
-                <a href="{{ url_for('excel.view_file', file_id=excel_file.id) }}" class="btn btn-outline-secondary me-2">
-                    <i class="bi bi-arrow-left me-1"></i>Torna al File
-                </a>
-                <a href="{{ url_for('excel.view_file', file_id=excel_file.id, view='questions') }}" class="btn btn-outline-primary">
-                    <i class="bi bi-list-ul me-1"></i>Vista Quesiti
-                </a>
-            </div>
-        </div>
-    </div>
-</div>
 
 <!-- Statistiche generali -->
 <div class="row mb-4">
@@ -75,6 +76,54 @@
                         <i class="bi bi-graph-up me-1"></i>Vedi Statistiche
                     </a>
                 </div>
+
+                <hr class="my-3">
+                <h6 class="mb-3">
+                    <i class="bi bi-robot me-2"></i>Workflow AI: Etichetta Tutte Le Risposte Tematiche
+                </h6>
+                <p class="text-muted small mb-3">
+                    Il workflow esclude automaticamente le domande anagrafiche (es. nome, età, codici identificativi, dati personali).
+                </p>
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-4">
+                        <label for="workflow-template-select" class="form-label mb-1">Template AI</label>
+                        <select id="workflow-template-select" class="form-select form-select-sm">
+                            <option value="1" selected>1 - Standard Quesiti</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label for="workflow-batch-size" class="form-label mb-1">Batch</label>
+                        <select id="workflow-batch-size" class="form-select form-select-sm">
+                            <option value="1">1</option>
+                            <option value="3" selected>3</option>
+                            <option value="5">5</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label for="workflow-max-cells" class="form-label mb-1">Celle/Passo</label>
+                        <select id="workflow-max-cells" class="form-select form-select-sm">
+                            <option value="10">10</option>
+                            <option value="20" selected>20</option>
+                            <option value="50">50</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <button id="start-all-questions-ai" class="btn btn-primary btn-sm me-2">
+                            <i class="bi bi-play-fill me-1"></i>Avvia Workflow AI
+                        </button>
+                        <button id="stop-all-questions-ai" class="btn btn-outline-danger btn-sm" disabled>
+                            <i class="bi bi-stop-fill me-1"></i>Ferma
+                        </button>
+                    </div>
+                </div>
+                <div class="mt-3" id="ai-workflow-panel" style="display: none;">
+                    <div class="progress" style="height: 20px;">
+                        <div id="ai-workflow-progress-bar" class="progress-bar progress-bar-striped progress-bar-animated bg-primary"
+                             role="progressbar" style="width: 0%;">0%</div>
+                    </div>
+                    <div id="ai-workflow-status" class="small text-muted mt-2"></div>
+                    <div id="ai-workflow-log" class="small mt-2"></div>
+                </div>
             </div>
         </div>
     </div>
@@ -106,7 +155,9 @@
                         <tbody>
                             {% for question_name, total_responses, annotated_responses in questions_stats %}
                             {% set progress = (annotated_responses / total_responses * 100) if total_responses > 0 else 0 %}
-                            <tr>
+                            {% set remaining = (total_responses - annotated_responses) if total_responses >= annotated_responses else 0 %}
+                            {% set is_demographic = question_name in demographic_questions %}
+                            <tr data-question-json='{{ question_name|tojson|forceescape }}' data-remaining="{{ remaining }}" data-demographic="{{ '1' if is_demographic else '0' }}">
                                 <td class="text-center fw-bold text-muted">
                                     {{ loop.index }}
                                 </td>
@@ -121,6 +172,9 @@
                                             <span class="badge bg-warning ms-2">In Corso</span>
                                             {% else %}
                                             <span class="badge bg-secondary ms-2">Non Iniziata</span>
+                                            {% endif %}
+                                            {% if is_demographic %}
+                                            <span class="badge bg-dark ms-2">Anagrafica (Esclusa AI)</span>
                                             {% endif %}
                                         </div>
                                     </div>
@@ -245,4 +299,172 @@
     margin-right: 2px;
 }
 </style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const fileId = {{ excel_file.id }};
+    const startBtn = document.getElementById('start-all-questions-ai');
+    const stopBtn = document.getElementById('stop-all-questions-ai');
+    const panel = document.getElementById('ai-workflow-panel');
+    const progressBar = document.getElementById('ai-workflow-progress-bar');
+    const statusEl = document.getElementById('ai-workflow-status');
+    const logEl = document.getElementById('ai-workflow-log');
+    const templateSelect = document.getElementById('workflow-template-select');
+    const batchSizeSelect = document.getElementById('workflow-batch-size');
+    const maxCellsSelect = document.getElementById('workflow-max-cells');
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
+    let stopRequested = false;
+
+    async function loadTemplates() {
+        try {
+            const res = await fetch('/ai/templates/available', {
+                headers: {'X-CSRF-Token': csrfToken}
+            });
+            if (!res.ok) return;
+            const data = await res.json();
+            if (!data.success || !data.templates) return;
+
+            templateSelect.innerHTML = '';
+            Object.entries(data.templates).forEach(([id, tpl]) => {
+                const option = document.createElement('option');
+                option.value = id;
+                option.textContent = `${id} - ${tpl.name}${tpl.category ? ` (${tpl.category})` : ''}`;
+                templateSelect.appendChild(option);
+            });
+        } catch (_) {
+            // Mantiene fallback locale
+        }
+    }
+
+    function appendLog(message, type = 'muted') {
+        const line = document.createElement('div');
+        line.className = `text-${type}`;
+        line.textContent = message;
+        logEl.prepend(line);
+    }
+
+    function getEligibleQuestions() {
+        const rows = Array.from(document.querySelectorAll('tr[data-question-json]'));
+        return rows
+            .filter(row => row.dataset.demographic !== '1')
+            .filter(row => parseInt(row.dataset.remaining || '0', 10) > 0)
+            .map(row => ({
+                name: JSON.parse(row.dataset.questionJson || '""'),
+                row: row
+            }));
+    }
+
+    function setRunningState(isRunning) {
+        startBtn.disabled = isRunning;
+        stopBtn.disabled = !isRunning;
+        templateSelect.disabled = isRunning;
+        batchSizeSelect.disabled = isRunning;
+        maxCellsSelect.disabled = isRunning;
+    }
+
+    startBtn.addEventListener('click', async function() {
+        const questions = getEligibleQuestions();
+        if (questions.length === 0) {
+            alert('Non ci sono domande tematiche con risposte da etichettare.');
+            return;
+        }
+
+        const confirmMsg =
+            `Avvio workflow AI su ${questions.length} domande tematiche.\n` +
+            `Le domande anagrafiche saranno escluse.\n\n` +
+            `Confermi?`;
+        if (!confirm(confirmMsg)) return;
+
+        stopRequested = false;
+        panel.style.display = 'block';
+        logEl.innerHTML = '';
+        setRunningState(true);
+
+        let totalProcessed = 0;
+        let totalCreated = 0;
+        let completed = 0;
+        const templateId = parseInt(templateSelect.value || '1', 10);
+        const batchSize = parseInt(batchSizeSelect.value || '3', 10);
+        const maxCellsPerSession = parseInt(maxCellsSelect.value || '20', 10);
+
+        statusEl.textContent = `Workflow avviato su ${questions.length} domande...`;
+
+        try {
+            for (const question of questions) {
+                if (stopRequested) break;
+
+                appendLog(`Domanda: ${question.name}`, 'primary');
+                let safetyCounter = 0;
+
+                while (!stopRequested) {
+                    safetyCounter += 1;
+                    if (safetyCounter > 200) {
+                        appendLog(`Interrotto per sicurezza su "${question.name}" (troppi cicli).`, 'warning');
+                        break;
+                    }
+
+                    const response = await fetch(`/ai/generate/${fileId}`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-Token': csrfToken
+                        },
+                        body: JSON.stringify({
+                            question_name: question.name,
+                            mode: 'new',
+                            template_id: templateId,
+                            batch_size: batchSize,
+                            max_tokens: 500,
+                            timeout: 90,
+                            max_cells_per_session: maxCellsPerSession,
+                            selected_categories: []
+                        })
+                    });
+
+                    const data = await response.json();
+                    if (!response.ok || !data.success) {
+                        throw new Error(data.error || data.message || `Errore su "${question.name}"`);
+                    }
+
+                    totalProcessed += data.total_processed || 0;
+                    totalCreated += data.annotations_count || 0;
+
+                    const remaining = parseInt(data.remaining_cells || 0, 10);
+                    question.row.dataset.remaining = String(remaining);
+                    appendLog(`  - Processate ${data.total_processed || 0}, suggerimenti ${data.annotations_count || 0}, rimanenti ${remaining}`, 'muted');
+
+                    if (remaining <= 0 || (data.total_processed || 0) <= 0) {
+                        completed += 1;
+                        break;
+                    }
+                }
+
+                const progress = Math.round((completed / questions.length) * 100);
+                progressBar.style.width = `${progress}%`;
+                progressBar.textContent = `${progress}%`;
+                statusEl.textContent = `Domande completate: ${completed}/${questions.length} - Celle processate: ${totalProcessed} - Suggerimenti AI: ${totalCreated}`;
+            }
+
+            if (stopRequested) {
+                appendLog('Workflow fermato manualmente.', 'warning');
+            } else {
+                appendLog('Workflow completato.', 'success');
+            }
+        } catch (error) {
+            appendLog(`Errore workflow: ${error.message}`, 'danger');
+        } finally {
+            setRunningState(false);
+        }
+    });
+
+    stopBtn.addEventListener('click', function() {
+        stopRequested = true;
+    });
+
+    loadTemplates();
+});
+</script>
 {% endblock %}

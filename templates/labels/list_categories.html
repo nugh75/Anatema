@@ -1,34 +1,40 @@
 {% extends "base.html" %}
+{% from "_components/breadcrumb.html" import render_breadcrumb %}
+{% from "_components/page_header.html" import render_page_header %}
 
-{% block title %}Gestisci Categorie -Anatema{% endblock %}
+{% block title %}Categorie - Anatema{% endblock %}
+
+{% block breadcrumb %}
+{{ render_breadcrumb([
+    ('Home', url_for('main.dashboard')),
+    ('Etichette', url_for('labels.list_labels')),
+    ('Categorie', None)
+]) }}
+{% endblock %}
+
+{% block page_header %}
+{% set acts = [] %}
+{% if current_user.is_admin %}
+  {% set acts = acts + [
+    {'label': 'Crea Categoria', 'url': url_for('labels.create_category'), 'icon': 'bi-plus-circle', 'style': 'primary'},
+    {'label': 'Tassonomia', 'url': url_for('labels.taxonomy_dashboard'), 'icon': 'bi-diagram-3', 'style': 'outline-dark'}
+  ] %}
+{% endif %}
+{% if show_inactive %}
+  {% set acts = acts + [{'label': 'Solo Attive', 'url': url_for('labels.list_categories'), 'icon': 'bi-eye', 'style': 'outline-info'}] %}
+{% else %}
+  {% set acts = acts + [{'label': 'Mostra Inattive', 'url': url_for('labels.list_categories', show_inactive=True), 'icon': 'bi-eye-slash', 'style': 'outline-secondary'}] %}
+{% endif %}
+{{ render_page_header(
+    title='Categorie',
+    subtitle='Raggruppa le etichette per tema',
+    icon='bi-folder-plus',
+    step_num=3,
+    actions=acts
+) }}
+{% endblock %}
 
 {% block content %}
-<div class="row mb-4">
-    <div class="col-12">
-        <div class="d-flex justify-content-between align-items-center">
-            <h2>
-                <i class="bi bi-folder-plus me-2"></i>Gestisci Categorie
-            </h2>
-            <div>
-                <a href="{{ url_for('labels.create_category') }}" class="btn btn-primary">
-                    <i class="bi bi-plus-circle me-1"></i>Crea Categoria
-                </a>
-                {% if show_inactive %}
-                <a href="{{ url_for('labels.list_categories') }}" class="btn btn-outline-info">
-                    <i class="bi bi-eye me-1"></i>Solo Attive
-                </a>
-                {% else %}
-                <a href="{{ url_for('labels.list_categories', show_inactive=True) }}" class="btn btn-outline-secondary">
-                    <i class="bi bi-eye-slash me-1"></i>Mostra Inattive
-                </a>
-                {% endif %}
-                <a href="{{ url_for('labels.list_labels') }}" class="btn btn-outline-secondary">
-                    <i class="bi bi-arrow-left me-1"></i>Torna alle Etichette
-                </a>
-            </div>
-        </div>
-    </div>
-</div>
 
 <div class="row">
     <div class="col-12">
@@ -75,13 +81,16 @@
                                     </span>
                                 </td>
                                 <td class="text-center">
-                                    {% if category.is_active %}
+                                    {% if category.merged_into_category_id %}
+                                    <span class="badge bg-dark">Deprecata (merge)</span>
+                                    {% elif category.is_active %}
                                     <span class="badge bg-success">Attiva</span>
                                     {% else %}
                                     <span class="badge bg-secondary">Inattiva</span>
                                     {% endif %}
                                 </td>
                                 <td class="text-center">
+                                    {% if current_user.is_admin %}
                                     <div class="btn-group btn-group-sm" role="group">
                                         <a href="{{ url_for('labels.edit_category', category_id=category.id) }}" 
                                            class="btn btn-outline-primary" 
@@ -92,9 +101,9 @@
                                             {% if category_stats[category.id] == 0 %}
                                             <button type="button" 
                                                     class="btn btn-outline-danger" 
-                                                    title="Elimina"
+                                                    title="Depreca"
                                                     onclick="confirmDelete({{ category.id }}, '{{ category.name }}')">
-                                                <i class="bi bi-trash"></i>
+                                                <i class="bi bi-archive"></i>
                                             </button>
                                             {% else %}
                                             <button type="button" 
@@ -105,9 +114,9 @@
                                             </button>
                                             <button type="button" 
                                                     class="btn btn-outline-danger" 
-                                                    title="Elimina categoria e {{ category_stats[category.id] }} etichette"
+                                                    title="Depreca categoria e migra {{ category_stats[category.id] }} etichette"
                                                     onclick="confirmDeleteWithLabels({{ category.id }}, '{{ category.name }}', {{ category_stats[category.id] }})">
-                                                <i class="bi bi-trash-fill"></i>
+                                                <i class="bi bi-archive-fill"></i>
                                             </button>
                                             {% endif %}
                                         {% else %}
@@ -119,6 +128,9 @@
                                             </button>
                                         {% endif %}
                                     </div>
+                                    {% else %}
+                                    <small class="text-muted">Solo admin</small>
+                                    {% endif %}
                                 </td>
                             </tr>
                             {% endfor %}
@@ -223,7 +235,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function confirmDelete(categoryId, categoryName) {
-    if (confirm(`Sei sicuro di voler eliminare definitivamente la categoria "${categoryName}"?`)) {
+    if (confirm(`Confermi la deprecazione della categoria "${categoryName}"?`)) {
         const form = document.getElementById('deleteForm');
         form.action = "{{ url_for('labels.delete_category', category_id=0) }}".replace('0', categoryId);
         form.submit();
@@ -247,7 +259,7 @@ function confirmReactivate(categoryId, categoryName) {
 }
 
 function confirmDeleteWithLabels(categoryId, categoryName, labelCount) {
-    const message = `ATTENZIONE!\n\nStai per eliminare la categoria "${categoryName}" che contiene ${labelCount} etichette.\n\nQuesto disattiverà:\n- La categoria\n- Tutte le ${labelCount} etichette\n\nQuesta azione può essere annullata riattivando la categoria.\n\nSei sicuro di voler procedere?`;
+    const message = `ATTENZIONE!\n\nStai per deprecare la categoria "${categoryName}" che contiene ${labelCount} etichette.\n\nQuesto applicherà:\n- Deprecazione categoria\n- Migrazione di ${labelCount} etichette in "Nessuna categoria"\n\nSei sicuro di voler procedere?`;
     
     if (confirm(message)) {
         const form = document.getElementById('deleteWithLabelsForm');

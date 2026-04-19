@@ -1,6 +1,25 @@
 {% extends "base.html" %}
+{% from "_components/breadcrumb.html" import render_breadcrumb %}
+{% from "_components/page_header.html" import render_page_header %}
 
-{% block title %}Revisione Annotazioni AI - {{ excel_file.original_filename }}{% endblock %}
+{% block title %}Revisione AI - {{ excel_file.original_filename }}{% endblock %}
+
+{% block breadcrumb %}
+{{ render_breadcrumb([
+    ('Home', url_for('main.dashboard')),
+    ('Revisione AI', url_for('ai.ai_dashboard')),
+    (excel_file.original_filename, None)
+]) }}
+{% endblock %}
+
+{% block page_header %}
+{{ render_page_header(
+    title='Revisione Annotazioni AI',
+    subtitle='File: ' ~ excel_file.original_filename,
+    icon='bi-robot',
+    step_num=5
+) }}
+{% endblock %}
 
 {% block extra_css %}
 <style>

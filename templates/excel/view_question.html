@@ -1,30 +1,30 @@
 {% extends "base.html" %}
+{% from "_components/breadcrumb.html" import render_breadcrumb %}
+{% from "_components/page_header.html" import render_page_header %}
 
-{% block title %}{{ question_name }} - {{ excel_file.original_filename }} -Anatema{% endblock %}
+{% block title %}{{ question_name }} - {{ excel_file.original_filename }} - Anatema{% endblock %}
+
+{% block breadcrumb %}
+{{ render_breadcrumb([
+    ('Home', url_for('main.dashboard')),
+    ('Documenti', url_for('excel.list_files')),
+    (excel_file.original_filename, url_for('excel.view_file', file_id=excel_file.id)),
+    (question_name, None)
+]) }}
+{% endblock %}
+
+{% block page_header %}
+{{ render_page_header(
+    title=question_name,
+    subtitle='File: ' ~ excel_file.original_filename,
+    icon='bi-question-circle',
+    actions=[
+      {'label': 'Panoramica Domande', 'url': url_for('excel.questions_overview', file_id=excel_file.id), 'icon': 'bi-grid-3x3-gap', 'style': 'outline-primary'}
+    ]
+) }}
+{% endblock %}
 
 {% block content %}
-<div class="row mb-4">
-    <div class="col-12">
-        <div class="d-flex justify-content-between align-items-center">
-            <div>
-                <h2>
-                    <i class="bi bi-question-circle me-2"></i>{{ question_name }}
-                </h2>
-                <p class="text-muted mb-0">
-                    File: {{ excel_file.original_filename }}
-                </p>
-            </div>
-            <div>
-                <a href="{{ url_for('excel.view_file', file_id=excel_file.id, view='questions') }}" class="btn btn-outline-secondary me-2">
-                    <i class="bi bi-arrow-left me-1"></i>Torna alle Domande
-                </a>
-                <a href="{{ url_for('excel.questions_overview', file_id=excel_file.id) }}" class="btn btn-outline-primary">
-                    <i class="bi bi-grid-3x3-gap me-1"></i>Panoramica Domande
-                </a>
-            </div>
-        </div>
-    </div>
-</div>
 
 <!-- Statistiche della domanda -->
 <div class="row mb-4">
@@ -86,7 +86,7 @@
                 <div class="row">
                     <div class="col-md-8">
                         <p class="mb-3">
-                            Utilizza l'AI per generare automaticamente etichette per tutte le risposte non ancora annotate.<br>
+                            Utilizza l'AI per generare automaticamente etichette per le risposte di questa domanda non ancora annotate.<br>
                             Potrai poi rivedere e accettare/rifiutare ogni suggerimento.
                         </p>
                         <form id="ai-options-form" class="mb-3">
@@ -204,7 +204,7 @@
                         
                         <!-- Pulsante Principale Unificato -->
                         <div class="d-flex gap-2 align-items-center mb-3">
-                            <button id="generate-ai-labels" class="btn btn-primary btn-lg" data-file-id="{{ excel_file.id }}" disabled>
+                            <button id="generate-ai-labels" class="btn btn-primary btn-lg" data-file-id="{{ excel_file.id }}" data-custom-ai-handler="true" disabled>
                                 <i class="bi bi-magic me-2"></i>
                                 <span id="generate-button-text">Genera Etichette con AI</span>
                             </button>
@@ -664,6 +664,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const promptPreview = document.getElementById('ai-prompt-preview');
     const templateSelect = document.getElementById('ai-template-select');
     const fileId = {{ excel_file.id }};
+    const questionName = {{ question_name|tojson }};
 
     // Template hardcoded come fallback affidabile
     const hardcodedTemplates = {
@@ -797,6 +798,7 @@ document.addEventListener('DOMContentLoaded', function() {
             },
             body: JSON.stringify({
                 file_id: fileId,
+                question_name: questionName,
                 template_id: parseInt(templateId),
                 selected_categories: selectedCategories,
                 batch_size: 5
@@ -996,6 +998,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     },
                     body: JSON.stringify({
                         file_id: fileId,
+                        question_name: questionName,
                         template_id: parseInt(templateId),
                         mode: currentMode,
                         selected_categories: selectedCategories,

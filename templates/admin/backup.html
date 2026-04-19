@@ -1,13 +1,29 @@
 {% extends "base.html" %}
+{% from "_components/breadcrumb.html" import render_breadcrumb %}
+{% from "_components/page_header.html" import render_page_header %}
 
-{% block title %}Backup Sistema{% endblock %}
+{% block title %}Backup - Anatema{% endblock %}
+
+{% block breadcrumb %}
+{{ render_breadcrumb([
+    ('Home', url_for('main.dashboard')),
+    ('Amministrazione', None),
+    ('Backup', None)
+]) }}
+{% endblock %}
+
+{% block page_header %}
+{{ render_page_header(
+    title='Gestione Backup',
+    subtitle='Esporta e ripristina lo stato del sistema',
+    icon='bi-hdd'
+) }}
+{% endblock %}
 
 {% block content %}
 <div class="container">
     <div class="row">
         <div class="col-12">
-            <h2><i class="fas fa-download"></i> Gestione Backup</h2>
-            
             <div class="row mb-4">
                 <div class="col-md-3">
                     <div class="card text-center">

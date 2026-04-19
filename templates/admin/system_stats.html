@@ -1,13 +1,29 @@
 {% extends "base.html" %}
+{% from "_components/breadcrumb.html" import render_breadcrumb %}
+{% from "_components/page_header.html" import render_page_header %}
 
-{% block title %}Statistiche Sistema{% endblock %}
+{% block title %}Statistiche Sistema - Anatema{% endblock %}
+
+{% block breadcrumb %}
+{{ render_breadcrumb([
+    ('Home', url_for('main.dashboard')),
+    ('Amministrazione', None),
+    ('Statistiche Sistema', None)
+]) }}
+{% endblock %}
+
+{% block page_header %}
+{{ render_page_header(
+    title='Statistiche Sistema',
+    subtitle='Panoramica globale di utenti, file, etichette e annotazioni',
+    icon='bi-bar-chart'
+) }}
+{% endblock %}
 
 {% block content %}
 <div class="container">
     <div class="row">
         <div class="col-12">
-            <h2><i class="fas fa-chart-bar"></i> Statistiche Sistema</h2>
-            
             <!-- Statistiche Utenti -->
             <div class="row mb-4">
                 <div class="col-md-3">

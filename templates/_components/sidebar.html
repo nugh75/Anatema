@@ -1,0 +1,152 @@
+{#
+  Sidebar nav — 3 sections: Processo, Collaborazione, Amministrazione.
+  Active highlight via request.endpoint.
+#}
+{% set ep = request.endpoint or '' %}
+{% set bp = request.blueprint or '' %}
+
+{# Map blueprint → process step for active-class detection #}
+{% set step_active = {
+    1: bp in ['excel', 'text_documents'],
+    2: bp == 'questions',
+    3: bp == 'labels',
+    4: bp == 'annotation',
+    5: bp == 'ai',
+    6: bp == 'statistics'
+} %}
+
+<aside class="app-sidebar" id="appSidebar" aria-label="Navigazione principale">
+  <div class="app-sidebar__brand">
+    <a href="{{ url_for('main.dashboard') }}" class="app-sidebar__brand-link">
+      <i class="bi bi-tags-fill"></i>
+      <span class="app-sidebar__brand-text">Anatema</span>
+    </a>
+  </div>
+
+  {% if current_user.is_authenticated %}
+  <nav class="app-sidebar__nav">
+
+    <a href="{{ url_for('main.dashboard') }}"
+       class="app-sidebar__link {% if ep == 'main.dashboard' %}is-active{% endif %}">
+      <i class="bi bi-speedometer2"></i>
+      <span>Dashboard</span>
+    </a>
+
+    <div class="app-sidebar__section">
+      <h6 class="app-sidebar__section-title">Processo</h6>
+      <ol class="app-sidebar__steps">
+        <li>
+          <a href="{{ url_for('excel.list_files') }}"
+             class="app-sidebar__step {% if step_active[1] %}is-active{% endif %}">
+            <span class="app-sidebar__step-num">1</span>
+            <span class="app-sidebar__step-label">
+              <i class="bi bi-file-earmark"></i> Documenti
+            </span>
+          </a>
+        </li>
+        <li>
+          <a href="{{ url_for('questions.manage_questions') }}"
+             class="app-sidebar__step {% if step_active[2] %}is-active{% endif %}">
+            <span class="app-sidebar__step-num">2</span>
+            <span class="app-sidebar__step-label">
+              <i class="bi bi-patch-question"></i> Domande
+            </span>
+          </a>
+        </li>
+        <li>
+          <a href="{{ url_for('labels.list_labels') }}"
+             class="app-sidebar__step {% if step_active[3] %}is-active{% endif %}">
+            <span class="app-sidebar__step-num">3</span>
+            <span class="app-sidebar__step-label">
+              <i class="bi bi-tags"></i> Etichette
+            </span>
+          </a>
+        </li>
+        <li>
+          <a href="{{ url_for('annotation.browse_annotations') }}"
+             class="app-sidebar__step {% if step_active[4] %}is-active{% endif %}">
+            <span class="app-sidebar__step-num">4</span>
+            <span class="app-sidebar__step-label">
+              <i class="bi bi-pencil-square"></i> Annotazione
+            </span>
+          </a>
+        </li>
+        <li>
+          <a href="{{ url_for('ai.ai_dashboard') }}"
+             class="app-sidebar__step {% if step_active[5] %}is-active{% endif %}">
+            <span class="app-sidebar__step-num">5</span>
+            <span class="app-sidebar__step-label">
+              <i class="bi bi-robot"></i> Revisione AI
+            </span>
+          </a>
+        </li>
+        <li>
+          <a href="{{ url_for('statistics.overview') }}"
+             class="app-sidebar__step {% if step_active[6] %}is-active{% endif %}">
+            <span class="app-sidebar__step-num">6</span>
+            <span class="app-sidebar__step-label">
+              <i class="bi bi-graph-up"></i> Statistiche
+            </span>
+          </a>
+        </li>
+      </ol>
+    </div>
+
+    <div class="app-sidebar__section">
+      <h6 class="app-sidebar__section-title">Collaborazione</h6>
+      <a href="{{ url_for('diary.index') }}"
+         class="app-sidebar__link {% if bp == 'diary' %}is-active{% endif %}">
+        <i class="bi bi-journal-text"></i>
+        <span>Diario di Bordo</span>
+      </a>
+      <a href="{{ url_for('forum.index') }}"
+         class="app-sidebar__link {% if bp == 'forum' %}is-active{% endif %}">
+        <i class="bi bi-chat-dots"></i>
+        <span>Forum</span>
+      </a>
+    </div>
+
+    {% if current_user.can_manage_users() %}
+    <div class="app-sidebar__section">
+      <h6 class="app-sidebar__section-title">Amministrazione</h6>
+      <a href="{{ url_for('admin.manage_users') }}"
+         class="app-sidebar__link {% if ep == 'admin.manage_users' %}is-active{% endif %}">
+        <i class="bi bi-people"></i>
+        <span>Utenti</span>
+      </a>
+      <a href="{{ url_for('admin.ai_configuration') }}"
+         class="app-sidebar__link {% if ep == 'admin.ai_configuration' %}is-active{% endif %}">
+        <i class="bi bi-gear-fill"></i>
+        <span>Configurazione AI</span>
+      </a>
+      <a href="{{ url_for('admin.manage_templates') }}"
+         class="app-sidebar__link {% if ep == 'admin.manage_templates' %}is-active{% endif %}">
+        <i class="bi bi-file-text"></i>
+        <span>Template AI</span>
+      </a>
+      <a href="{{ url_for('admin.ollama_models') }}"
+         class="app-sidebar__link {% if ep == 'admin.ollama_models' %}is-active{% endif %}">
+        <i class="bi bi-download"></i>
+        <span>Modelli Ollama</span>
+      </a>
+      <a href="{{ url_for('admin.openrouter_models') }}"
+         class="app-sidebar__link {% if ep == 'admin.openrouter_models' %}is-active{% endif %}">
+        <i class="bi bi-cloud"></i>
+        <span>Modelli OpenRouter</span>
+      </a>
+      <a href="{{ url_for('admin.backup_page') }}"
+         class="app-sidebar__link {% if ep == 'admin.backup_page' %}is-active{% endif %}">
+        <i class="bi bi-hdd"></i>
+        <span>Backup</span>
+      </a>
+      <a href="{{ url_for('admin.system_stats') }}"
+         class="app-sidebar__link {% if ep == 'admin.system_stats' %}is-active{% endif %}">
+        <i class="bi bi-bar-chart"></i>
+        <span>Statistiche Sistema</span>
+      </a>
+    </div>
+    {% endif %}
+
+  </nav>
+  {% endif %}
+</aside>

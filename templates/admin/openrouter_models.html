@@ -1,6 +1,24 @@
 {% extends "base.html" %}
+{% from "_components/breadcrumb.html" import render_breadcrumb %}
+{% from "_components/page_header.html" import render_page_header %}
 
-{% block title %}Modelli OpenRouter - Admin{% endblock %}
+{% block title %}Modelli OpenRouter - Anatema{% endblock %}
+
+{% block breadcrumb %}
+{{ render_breadcrumb([
+    ('Home', url_for('main.dashboard')),
+    ('Amministrazione', None),
+    ('Modelli OpenRouter', None)
+]) }}
+{% endblock %}
+
+{% block page_header %}
+{{ render_page_header(
+    title='Modelli OpenRouter',
+    subtitle='Gestisci modelli remoti via OpenRouter',
+    icon='bi-cloud'
+) }}
+{% endblock %}
 
 {% block extra_css %}
 <style>

@@ -17,6 +17,53 @@ def allowed_file(filename):
     """Verifica se il file ha un'estensione consentita"""
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ['xlsx', 'xls']
 
+
+def is_demographic_question(question_name: str) -> bool:
+    """
+    Heuristica per identificare domande anagrafiche/non tematiche
+    (nome, età, contatti, codici identificativi, ecc.).
+    """
+    if not question_name:
+        return False
+
+    text = question_name.lower()
+    text = (
+        text.replace('à', 'a')
+            .replace('è', 'e')
+            .replace('é', 'e')
+            .replace('ì', 'i')
+            .replace('ò', 'o')
+            .replace('ù', 'u')
+    )
+
+    demographic_markers = [
+        'anagraf',
+        'nome e cognome',
+        'nome completo',
+        'il tuo nome',
+        'tuo nome',
+        'cognome',
+        'eta',
+        'sesso',
+        'genere',
+        'nascita',
+        'codice fiscale',
+        'codice di',
+        'telefono',
+        'cellulare',
+        'email',
+        'e-mail',
+        'indirizzo',
+        'residenza',
+        'cap ',
+        'comune',
+        'provincia',
+        'madre',
+        'padre',
+    ]
+
+    return any(marker in text for marker in demographic_markers)
+
 def extract_text_cells(file_path, excel_file_id):
     """Estrae le celle testuali da un file Excel"""
     try:
@@ -298,17 +345,23 @@ def questions_overview(file_id):
     # Ottieni statistiche per ogni domanda
     questions_stats = db.session.query(
         TextCell.column_name,
-        db.func.count(TextCell.id).label('total_responses'),
-        db.func.count(CellAnnotation.id).label('annotated_responses')
+        db.func.count(db.distinct(TextCell.id)).label('total_responses'),
+        db.func.count(db.distinct(CellAnnotation.text_cell_id)).label('annotated_responses')
     ).outerjoin(CellAnnotation)\
      .filter(TextCell.excel_file_id == file_id)\
      .group_by(TextCell.column_name)\
      .order_by(TextCell.column_name)\
      .all()
+
+    demographic_questions = {
+        question_name for question_name, _, _ in questions_stats
+        if is_demographic_question(question_name)
+    }
     
     return render_template('excel/questions_overview.html',
                          excel_file=excel_file,
-                         questions_stats=questions_stats)
+                         questions_stats=questions_stats,
+                         demographic_questions=demographic_questions)
 
 @excel_bp.route('/file/<int:file_id>/delete', methods=['POST'])
 @login_required

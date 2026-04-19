@@ -154,9 +154,12 @@ class AIAnnotatorService:
         # Organizza le etichette per categoria per una presentazione più chiara
         categories_dict = defaultdict(list)
         for label in labels:
-            if label.is_active:
-                category_name = label.category_obj.name if label.category_obj else 'Generale'
-                categories_dict[category_name].append(label)
+            if not label.is_active or label.merged_into_label_id is not None:
+                continue
+            if label.category_obj and (not label.category_obj.is_active or label.category_obj.merged_into_category_id is not None):
+                continue
+            category_name = label.category_obj.name if label.category_obj else 'Generale'
+            categories_dict[category_name].append(label)
 
         # Costruisce la lista delle categorie ed etichette in modo più strutturato
         categories_text = "ETICHETTE DISPONIBILI (sempre aggiornate dal sistema):\n"
@@ -234,9 +237,18 @@ class AIAnnotatorService:
         elif config.provider == 'openrouter':
             self.openrouter_client = OpenRouterClient(config.openrouter_api_key)
     
-    def generate_annotations(self, file_id: int, batch_size: int = 3, mode: str = 'new', 
-                           template_id: int = None, selected_categories: List[str] = None,
-                           max_tokens: int = 500, timeout: int = 90) -> Dict:
+    def generate_annotations(
+        self,
+        file_id: int,
+        batch_size: int = 3,
+        mode: str = 'new',
+        template_id: int = None,
+        selected_categories: List[str] = None,
+        max_tokens: int = 500,
+        timeout: int = 90,
+        question_name: Optional[str] = None,
+        max_cells_per_session: int = 20
+    ) -> Dict:
         """
         Genera annotazioni AI per un file
         
@@ -248,6 +260,8 @@ class AIAnnotatorService:
             selected_categories: Lista delle categorie selezionate per il prompt
             max_tokens: Numero massimo di token per risposta AI
             timeout: Timeout in secondi per le chiamate AI
+            question_name: Se valorizzato limita la generazione a una specifica domanda/colonna
+            max_cells_per_session: Limite massimo di celle processate in una singola richiesta
         """
         try:
             # Ottiene la configurazione attiva
@@ -260,29 +274,53 @@ class AIAnnotatorService:
             # Ottiene le etichette disponibili con join per evitare problemi di lazy loading
             if selected_categories:
                 from models import Category
-                categories = Category.query.filter(Category.name.in_(selected_categories)).all()
+                categories = Category.query.filter(
+                    Category.name.in_(selected_categories),
+                    Category.is_active == True,  # noqa: E712
+                    Category.merged_into_category_id.is_(None)
+                ).all()
                 labels = []
                 for cat in categories:
-                    labels.extend(Label.query.options(db.joinedload(Label.category_obj)).filter_by(category_id=cat.id, is_active=True).all())
+                    labels.extend(
+                        Label.query.options(db.joinedload(Label.category_obj)).filter(
+                            Label.category_id == cat.id,
+                            Label.is_active == True,  # noqa: E712
+                            Label.merged_into_label_id.is_(None)
+                        ).all()
+                    )
             else:
-                labels = Label.query.options(db.joinedload(Label.category_obj)).filter_by(is_active=True).order_by(Label.category, Label.name).all()
+                labels = Label.query.options(db.joinedload(Label.category_obj)).filter(
+                    Label.is_active == True,  # noqa: E712
+                    Label.merged_into_label_id.is_(None)
+                ).order_by(Label.name).all()
+                labels = [
+                    lbl for lbl in labels
+                    if not lbl.category_obj or (
+                        lbl.category_obj.is_active and lbl.category_obj.merged_into_category_id is None
+                    )
+                ]
             
             if not labels:
                 return {"error": "Nessuna etichetta attiva disponibile"}
 
+            # Filtro base: file e, opzionalmente, domanda specifica
+            base_filters = [TextCell.excel_file_id == file_id]
+            if question_name:
+                base_filters.append(TextCell.column_name == question_name)
+
             # Ottiene i testi da annotare in base alla modalità
             if mode == 'replace':
                 # Ri-etichettatura: tutte le celle
-                target_cells = TextCell.query.filter_by(excel_file_id=file_id).all()
+                target_cells = TextCell.query.filter(*base_filters).all()
                 print(f"🔄 Modalità sostituzione: {len(target_cells)} celle totali")
             elif mode == 'additional':
                 # Etichettatura aggiuntiva: tutte le celle (anche quelle già annotate)
-                target_cells = TextCell.query.filter_by(excel_file_id=file_id).all()
+                target_cells = TextCell.query.filter(*base_filters).all()
                 print(f"➕ Modalità aggiuntiva: {len(target_cells)} celle totali")
             else:  # mode == 'new'
                 # Modalità normale: solo celle non annotate
                 target_cells = TextCell.query.filter(
-                    TextCell.excel_file_id == file_id,
+                    *base_filters,
                     ~TextCell.id.in_(
                         db.session.query(CellAnnotation.text_cell_id).distinct()
                     )
@@ -296,7 +334,9 @@ class AIAnnotatorService:
             # Processa in batch più piccoli per evitare timeout
             all_annotations = []
             total_processed = 0
-            max_cells_per_session = 20  # Ridotto per performance migliori
+            max_cells_per_session = int(max_cells_per_session) if max_cells_per_session else 20
+            if max_cells_per_session <= 0:
+                max_cells_per_session = 20
 
             # Limita il numero di celle da processare
             cells_to_process = target_cells[:max_cells_per_session]
@@ -326,7 +366,11 @@ class AIAnnotatorService:
                 "message": f"Generate {len(all_annotations)} annotazioni (modalità: {mode})",
                 "annotations": all_annotations,
                 "total_processed": total_processed,
-                "mode": mode
+                "mode": mode,
+                "question_name": question_name,
+                "remaining_cells": max(0, len(target_cells) - len(cells_to_process)),
+                "total_target_cells": len(target_cells),
+                "max_cells_per_session": max_cells_per_session
             }
 
         except Exception as e:
@@ -444,36 +488,36 @@ class AIAnnotatorService:
                             if label_name_clean == name.lower() or label_name_clean in name.lower() or name.lower() in label_name_clean:
                                 label = lbl
                                 break
-                        
-                        if label:
-                            # Se è modalità ri-etichettatura, rimuovi le annotazioni esistenti dell'utente AI
-                            if re_annotate:
-                                existing_ai_annotations = CellAnnotation.query.filter_by(
-                                    text_cell_id=cell.id,
-                                    user_id=ai_user.id,
-                                    is_ai_generated=True
-                                ).all()
-                                for existing_ann in existing_ai_annotations:
-                                    db.session.delete(existing_ann)
-                            
-                            # Crea la nuova annotazione con status pending_review
-                            annotation = CellAnnotation(
+
+                    if label:
+                        # Se è modalità ri-etichettatura, rimuovi le annotazioni esistenti dell'utente AI
+                        if re_annotate:
+                            existing_ai_annotations = CellAnnotation.query.filter_by(
                                 text_cell_id=cell.id,
-                                label_id=label.id,
                                 user_id=ai_user.id,
-                                is_ai_generated=True,
-                                ai_confidence=ai_ann.get('confidence', 0.5),
-                                ai_model=config.ollama_model or config.openrouter_model,
-                                ai_provider=config.provider,
-                                status='pending_review'  # SEMPRE pending_review
-                            )
-                            
-                            db.session.add(annotation)
-                            annotations.append({
-                                'text': cell.text_content[:100] + '...',
-                                'label': label.name,
-                                'confidence': ai_ann.get('confidence', 0.5)
-                            })
+                                is_ai_generated=True
+                            ).all()
+                            for existing_ann in existing_ai_annotations:
+                                db.session.delete(existing_ann)
+
+                        # Crea la nuova annotazione con status pending_review
+                        annotation = CellAnnotation(
+                            text_cell_id=cell.id,
+                            label_id=label.id,
+                            user_id=ai_user.id,
+                            is_ai_generated=True,
+                            ai_confidence=ai_ann.get('confidence', 0.5),
+                            ai_model=config.ollama_model or config.openrouter_model,
+                            ai_provider=config.provider,
+                            status='pending_review'
+                        )
+
+                        db.session.add(annotation)
+                        annotations.append({
+                            'text': cell.text_content[:100] + '...',
+                            'label': label.name,
+                            'confidence': ai_ann.get('confidence', 0.5)
+                        })
             
             db.session.commit()
         
@@ -569,6 +613,44 @@ class AIAnnotatorService:
             print(f"Errore imprevisto nel parsing: {e}")
             return []
     
+    def generate_response(self, prompt: str, config: 'AIConfiguration', timeout: int = 90) -> Dict:
+        """
+        Invia un prompt al provider AI configurato e restituisce la risposta testuale.
+        Usato da BulkAnnotationService.
+        """
+        try:
+            self.initialize_clients(config)
+            messages = [
+                {"role": "system", "content": config.system_prompt or "Sei un assistente per l'etichettatura di testi."},
+                {"role": "user", "content": prompt}
+            ]
+
+            if config.provider == 'ollama':
+                raw = self.ollama_client.generate_chat(
+                    config.ollama_model, messages, config.temperature,
+                    config.max_tokens or 1000, timeout
+                )
+            elif config.provider == 'openrouter':
+                raw = self.openrouter_client.generate_chat(
+                    config.openrouter_model, messages, config.temperature,
+                    config.max_tokens or 1000
+                )
+            else:
+                return {"success": False, "error": f"Provider non supportato: {config.provider}"}
+
+            if not raw or 'error' in raw:
+                return {"success": False, "error": raw.get('error', 'Risposta vuota') if raw else 'Nessuna risposta'}
+
+            if config.provider == 'ollama':
+                text = raw.get('message', {}).get('content', '')
+            else:
+                text = raw.get('choices', [{}])[0].get('message', {}).get('content', '')
+
+            return {"success": True, "response": text}
+
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
     def review_annotation(self, annotation_id: int, action: str, reviewer_id: int) -> bool:
         """Rivede un'annotazione AI (accetta/rifiuta)"""
         try:

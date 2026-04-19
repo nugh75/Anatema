@@ -1,6 +1,25 @@
 {% extends "base.html" %}
+{% from "_components/breadcrumb.html" import render_breadcrumb %}
+{% from "_components/page_header.html" import render_page_header %}
 
-{% block title %}Crea Etichetta -Anatema{% endblock %}
+{% block title %}Crea Etichetta - Anatema{% endblock %}
+
+{% block breadcrumb %}
+{{ render_breadcrumb([
+    ('Home', url_for('main.dashboard')),
+    ('Etichette', url_for('labels.list_labels')),
+    ('Crea', None)
+]) }}
+{% endblock %}
+
+{% block page_header %}
+{{ render_page_header(
+    title='Crea Etichetta',
+    subtitle='Aggiungi una nuova etichetta al vocabolario tematico',
+    icon='bi-plus-circle',
+    step_num=3
+) }}
+{% endblock %}
 
 {% block head %}
 <style>

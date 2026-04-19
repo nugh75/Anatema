@@ -18,6 +18,99 @@ from services.openrouter_client import OpenRouterClient, KNOWN_FREE_MODELS, POPU
 
 admin_bp = Blueprint('admin', __name__)
 
+
+def _format_size_bytes(size_bytes):
+    """Converte bytes in stringa leggibile."""
+    try:
+        size = float(size_bytes or 0)
+    except (TypeError, ValueError):
+        return "N/A"
+
+    units = ["B", "KB", "MB", "GB", "TB"]
+    unit_idx = 0
+    while size >= 1024 and unit_idx < len(units) - 1:
+        size /= 1024.0
+        unit_idx += 1
+    if unit_idx == 0:
+        return f"{int(size)} {units[unit_idx]}"
+    return f"{size:.1f} {units[unit_idx]}"
+
+
+def _split_model_name(full_name):
+    full_name = (full_name or '').strip()
+    if not full_name:
+        return '', ''
+    if ':' in full_name:
+        return full_name.split(':', 1)
+    return full_name, 'latest'
+
+
+def _build_ollama_select_models(ollama_url=None, ensure_full_name=None):
+    """
+    Prepara una lista modelli per i dropdown:
+    - prova prima a leggere i modelli live da Ollama (se raggiungibile),
+    - fallback ai modelli locali in DB,
+    - garantisce la presenza del modello configurato (ensure_full_name).
+    """
+    models = []
+
+    # Fallback locale (DB)
+    db_models = OllamaModel.query.filter_by(is_pulled=True).all()
+    for model in db_models:
+        models.append({
+            'name': model.name,
+            'tag': model.tag or 'latest',
+            'size': model.size or 0,
+            'from_config': False
+        })
+
+    # Tentativo live
+    if ollama_url:
+        try:
+            client = OllamaClient(ollama_url)
+            if client.test_connection():
+                raw_models = client.list_models() or []
+                live_models = []
+                for model in raw_models:
+                    full_name = (model.get('name') or '').strip()
+                    if not full_name:
+                        continue
+                    name, tag = _split_model_name(full_name)
+                    live_models.append({
+                        'name': name,
+                        'tag': tag,
+                        'size': model.get('size', 0) or 0,
+                        'from_config': False
+                    })
+                if live_models:
+                    models = live_models
+        except Exception:
+            # Manteniamo fallback DB
+            pass
+
+    # Deduplica per full_name
+    dedup = {}
+    for model in models:
+        full_name = f"{model['name']}:{model['tag']}"
+        dedup[full_name] = model
+    models = list(dedup.values())
+
+    # Garantisce che il modello già salvato sia sempre visibile/selezionabile
+    if ensure_full_name:
+        name, tag = _split_model_name(ensure_full_name)
+        if name:
+            full_name = f"{name}:{tag}"
+            if full_name not in {f"{m['name']}:{m['tag']}" for m in models}:
+                models.insert(0, {
+                    'name': name,
+                    'tag': tag,
+                    'size': 0,
+                    'from_config': True
+                })
+
+    models.sort(key=lambda item: (item['name'].lower(), item['tag'].lower()))
+    return models
+
 def admin_required(f):
     """Decorator per verificare che l'utente sia amministratore"""
     @wraps(f)
@@ -358,8 +451,10 @@ def create_ai_config():
             db.session.rollback()
             flash(f'Errore nella creazione: {str(e)}', 'error')
     
-    # Carica modelli per dropdown
-    ollama_models = OllamaModel.query.filter_by(is_pulled=True).all()
+    # Carica modelli per dropdown (prefer live, fallback DB)
+    active_ollama = AIConfiguration.query.filter_by(provider='ollama', is_active=True).first()
+    live_url = active_ollama.ollama_url if active_ollama and active_ollama.ollama_url else None
+    ollama_models = _build_ollama_select_models(ollama_url=live_url)
     openrouter_models = OpenRouterModel.query.filter_by(is_available=True).all()
     
     return render_template('admin/create_ai_config.html',
@@ -402,8 +497,11 @@ def edit_ai_config(config_id):
             db.session.rollback()
             flash(f'Errore durante l\'aggiornamento: {str(e)}', 'error')
     
-    # Carica modelli per dropdown
-    ollama_models = OllamaModel.query.filter_by(is_pulled=True).all()
+    # Carica modelli per dropdown (prefer live per URL configurato, fallback DB)
+    ollama_models = _build_ollama_select_models(
+        ollama_url=config.ollama_url if config.provider == 'ollama' else None,
+        ensure_full_name=config.ollama_model if config.provider == 'ollama' else None
+    )
     openrouter_models = OpenRouterModel.query.filter_by(is_available=True).all()
     
     return render_template('admin/edit_ai_config.html', 
@@ -519,6 +617,62 @@ def test_ai_config_preview():
             
     except Exception as e:
         return jsonify({'success': False, 'message': f'Errore durante il test: {str(e)}'})
+
+
+@admin_bp.route('/ollama/models/live')
+@login_required
+@admin_required
+def ollama_live_models():
+    """Restituisce i modelli presenti su un endpoint Ollama specifico."""
+    ollama_url = (request.args.get('url') or '').strip()
+
+    if not ollama_url:
+        active_ollama = AIConfiguration.query.filter_by(provider='ollama', is_active=True).first()
+        ollama_url = active_ollama.ollama_url if active_ollama and active_ollama.ollama_url else 'http://127.0.0.1:11434'
+
+    try:
+        client = OllamaClient(ollama_url)
+        if not client.test_connection():
+            return jsonify({'success': False, 'message': f'Impossibile connettersi a {ollama_url}'}), 400
+
+        raw_models = client.list_models()
+
+        models = []
+        for model in raw_models:
+            full_name = (model.get('name') or '').strip()
+            if not full_name:
+                continue
+
+            if ':' in full_name:
+                name, tag = full_name.split(':', 1)
+            else:
+                name, tag = full_name, 'latest'
+
+            details = model.get('details') or {}
+            size_bytes = model.get('size', 0) or 0
+
+            models.append({
+                'name': name,
+                'tag': tag,
+                'full_name': f'{name}:{tag}',
+                'size_bytes': size_bytes,
+                'size_human': _format_size_bytes(size_bytes),
+                'family': details.get('family') or '',
+                'parameter_size': details.get('parameter_size') or '',
+                'quantization_level': details.get('quantization_level') or '',
+            })
+
+        models.sort(key=lambda item: (item['name'].lower(), item['tag'].lower()))
+
+        return jsonify({
+            'success': True,
+            'url': ollama_url,
+            'count': len(models),
+            'models': models
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 400
+
 
 @admin_bp.route('/ollama/models')
 @login_required

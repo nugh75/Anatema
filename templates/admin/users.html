@@ -1,17 +1,32 @@
 {% extends "base.html" %}
+{% from "_components/breadcrumb.html" import render_breadcrumb %}
+{% from "_components/page_header.html" import render_page_header %}
 
-{% block title %}Gestione Utenti{% endblock %}
+{% block title %}Gestione Utenti - Anatema{% endblock %}
+
+{% block breadcrumb %}
+{{ render_breadcrumb([
+    ('Home', url_for('main.dashboard')),
+    ('Amministrazione', None),
+    ('Utenti', None)
+]) }}
+{% endblock %}
+
+{% block page_header %}
+{{ render_page_header(
+    title='Gestione Utenti',
+    subtitle='Crea, modifica e gestisci gli account',
+    icon='bi-people',
+    actions=[
+      {'label': 'Nuovo Utente', 'url': url_for('admin.create_user'), 'icon': 'bi-person-plus', 'style': 'primary'}
+    ]
+) }}
+{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
     <div class="row">
         <div class="col-12">
-            <div class="d-flex justify-content-between align-items-center mb-4">
-                <h2><i class="fas fa-users"></i> Gestione Utenti</h2>
-                <a href="{{ url_for('admin.create_user') }}" class="btn btn-primary">
-                    <i class="fas fa-plus"></i> Nuovo Utente
-                </a>
-            </div>
 
             <div class="card">
                 <div class="card-body">

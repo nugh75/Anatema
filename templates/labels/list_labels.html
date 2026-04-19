@@ -1,50 +1,57 @@
 {% extends "base.html" %}
+{% from "_components/breadcrumb.html" import render_breadcrumb %}
+{% from "_components/page_header.html" import render_page_header %}
 
-{% block title %}Gestisci Etichette -Anatema{% endblock %}
+{% block title %}Etichette - Anatema{% endblock %}
+
+{% block breadcrumb %}
+{{ render_breadcrumb([
+    ('Home', url_for('main.dashboard')),
+    ('Etichette', None)
+]) }}
+{% endblock %}
+
+{% block page_header %}
+{{ render_page_header(
+    title='Etichette',
+    subtitle='Il vocabolario tematico con cui codifichi le risposte',
+    icon='bi-tags',
+    step_num=3,
+    help_text='Le etichette sono organizzate in categorie. Crea le etichette prima di iniziare l\'annotazione.',
+    actions=[
+      {'label': 'Nuova Etichetta', 'url': url_for('labels.create_label'), 'icon': 'bi-plus-circle', 'style': 'primary'},
+      {'label': 'Categorie', 'url': url_for('labels.list_categories'), 'icon': 'bi-collection', 'style': 'outline-info'}
+    ]
+) }}
+{% endblock %}
 
 {% block content %}
-<div class="row mb-4">
-    <div class="col-12">
-        <div class="d-flex justify-content-between align-items-center">
-            <div>
-                <h2>
-                    <i class="bi bi-tags me-2"></i>Gestisci Etichette
-                </h2>
-                <p class="text-muted">Visualizza e modifica le etichette disponibili per l'annotazione</p>
-            </div>
-            <div>
-                <a href="{{ url_for('labels.list_categories') }}" class="btn btn-info me-2">
-                    <i class="bi bi-collection me-2"></i>Gestisci Categorie
-                </a>
-                {% if current_user.is_admin %}
-                <a href="{{ url_for('labels.manage_category_colors') }}" class="btn btn-success me-2">
-                    <i class="bi bi-palette me-2"></i>Gestisci Colori
-                </a>
-                <div class="btn-group me-2" role="group">
-                    <button type="button" class="btn btn-warning dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
-                        <i class="bi bi-arrow-repeat me-2"></i>Sincronizza
-                    </button>
-                    <ul class="dropdown-menu">
-                        <li>
-                            <button type="button" class="dropdown-item" onclick="syncLabelColors(false)">
-                                <i class="bi bi-arrow-repeat me-2"></i>Sincronizzazione Standard
-                            </button>
-                        </li>
-                        <li>
-                            <button type="button" class="dropdown-item text-danger" onclick="syncLabelColors(true)">
-                                <i class="bi bi-exclamation-triangle me-2"></i>Forza Sincronizzazione
-                            </button>
-                        </li>
-                    </ul>
-                </div>
-                {% endif %}
-                <a href="{{ url_for('labels.merge_labels') }}" class="btn btn-warning">
-                    <i class="bi bi-arrow-down-up me-2"></i>Unisci Etichette
-                </a>
-            </div>
-        </div>
+{% if current_user.is_admin %}
+<div class="d-flex flex-wrap gap-2 mb-3">
+    <a href="{{ url_for('labels.manage_category_colors') }}" class="btn btn-sm btn-outline-success">
+        <i class="bi bi-palette me-1"></i>Gestisci Colori
+    </a>
+    <a href="{{ url_for('labels.taxonomy_dashboard') }}" class="btn btn-sm btn-outline-dark">
+        <i class="bi bi-diagram-3 me-1"></i>Tassonomia
+    </a>
+    <div class="btn-group btn-group-sm" role="group">
+        <button type="button" class="btn btn-outline-warning dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+            <i class="bi bi-arrow-repeat me-1"></i>Sincronizza
+        </button>
+        <ul class="dropdown-menu">
+            <li><button type="button" class="dropdown-item" onclick="syncLabelColors(false)">
+                <i class="bi bi-arrow-repeat me-2"></i>Sincronizzazione Standard
+            </button></li>
+            <li><button type="button" class="dropdown-item text-danger" onclick="syncLabelColors(true)">
+                <i class="bi bi-exclamation-triangle me-2"></i>Forza Sincronizzazione
+            </button></li>
+        </ul>
     </div>
+    <a href="{{ url_for('labels.merge_labels') }}" class="btn btn-sm btn-outline-warning">
+        <i class="bi bi-arrow-down-up me-1"></i>Merge Etichette
+    </a>
 </div>
+{% endif %}
 
 <!-- Filtri -->
 {% if categories %}
@@ -123,7 +130,7 @@
                         <div class="col-md-3">
                             <select name="action" id="bulkAction" class="form-select" required>
                                 <option value="">Seleziona azione...</option>
-                                <option value="delete">Elimina selezionate</option>
+                                <option value="delete">Depreca selezionate</option>
                                 <option value="assign_category">Assegna categoria</option>
                                 <option value="change_color">Cambia colore</option>
                             </select>
@@ -236,6 +243,7 @@
                                     <small class="text-muted">{{ label.created_at.strftime('%d/%m/%Y') }}</small>
                                 </td>
                                 <td>
+                                    {% if current_user.is_admin %}
                                     <div class="btn-group btn-group-sm" role="group">
                                         <a href="{{ url_for('labels.edit_label', label_id=label.id) }}" 
                                            class="btn btn-outline-primary" 
@@ -257,9 +265,9 @@
                                         {% if label.annotations|length == 0 %}
                                         <button type="button" 
                                                 class="btn btn-outline-danger"
-                                                title="Elimina etichetta definitivamente"
+                                                title="Depreca etichetta"
                                                 onclick="confirmDelete('{{ label.name }}', '{{ url_for('labels.delete_label', label_id=label.id) }}')">
-                                            <i class="bi bi-trash"></i>
+                                            <i class="bi bi-archive"></i>
                                         </button>
                                         {% else %}
                                         <button type="button" 
@@ -284,13 +292,16 @@
                                         {% if label.annotations|length == 0 %}
                                         <button type="button" 
                                                 class="btn btn-outline-danger"
-                                                title="Elimina etichetta definitivamente"
+                                                title="Depreca etichetta"
                                                 onclick="confirmDelete('{{ label.name }}', '{{ url_for('labels.delete_label', label_id=label.id) }}')">
-                                            <i class="bi bi-trash"></i>
+                                            <i class="bi bi-archive"></i>
                                         </button>
                                         {% endif %}
                                         {% endif %}
                                     </div>
+                                    {% else %}
+                                    <small class="text-muted">Solo admin</small>
+                                    {% endif %}
                                 </td>
                             </tr>
                             {% endfor %}
@@ -362,9 +373,11 @@
                     <a href="{{ url_for('labels.list_labels') }}" class="btn btn-outline-secondary">
                         <i class="bi bi-funnel me-2"></i>Rimuovi Filtro
                     </a>
+                    {% if current_user.is_admin %}
                     <a href="{{ url_for('labels.create_label') }}" class="btn btn-primary">
                         <i class="bi bi-plus-circle me-2"></i>Crea Etichetta
                     </a>
+                    {% endif %}
                 </div>
                 {% else %}
                 <h4 class="text-muted">Nessuna Etichetta Disponibile</h4>
@@ -372,9 +385,11 @@
                     Inizia creando la tua prima etichetta per categorizzare i contenuti testuali.
                     Le etichette ti aiuteranno a organizzare e analizzare i dati in modo sistematico.
                 </p>
+                {% if current_user.is_admin %}
                 <a href="{{ url_for('labels.create_label') }}" class="btn btn-primary btn-lg">
                     <i class="bi bi-plus-circle me-2"></i>Crea la Prima Etichetta
                 </a>
+                {% endif %}
                 {% endif %}
             </div>
         </div>
@@ -435,6 +450,7 @@
 {% endblock %}
 
 <!-- Pulsante fluttuante per creare nuova etichetta -->
+{% if current_user.is_admin %}
 <a href="{{ url_for('labels.create_label') }}" 
    class="btn btn-primary position-fixed rounded-circle shadow-lg" 
    style="bottom: 30px; right: 30px; width: 60px; height: 60px; z-index: 1050;"
@@ -443,6 +459,7 @@
    data-bs-placement="left">
     <i class="bi bi-plus-lg" style="font-size: 1.5rem; line-height: 1;"></i>
 </a>
+{% endif %}
 
 <!-- Modal per risultati sincronizzazione -->
 <div class="modal fade" id="syncResultModal" tabindex="-1" aria-labelledby="syncResultModalLabel" aria-hidden="true">
@@ -628,8 +645,7 @@ function showSyncError(error) {
 }
 
 function confirmDelete(labelName, deleteUrl) {
-    if (confirm(`Sei sicuro di voler eliminare l'etichetta "${labelName}"?\n\nQuesta azione non può essere annullata.`)) {
-        // Crea un form per l'eliminazione
+    if (confirm(`Confermi la deprecazione dell'etichetta "${labelName}"?\n\nL'etichetta verrà disattivata mantenendo lo storico.`)) {
         const form = document.createElement('form');
         form.method = 'POST';
         form.action = deleteUrl;
@@ -652,8 +668,7 @@ function confirmDelete(labelName, deleteUrl) {
 }
 
 function confirmSoftDelete(labelName, deleteUrl) {
-    if (confirm(`Sei sicuro di voler disattivare l'etichetta "${labelName}"?\n\nL'etichetta sarà nascosta ma le annotazioni esistenti rimarranno intatte.`)) {
-        // Crea un form per il soft delete
+    if (confirm(`Confermi la disattivazione dell'etichetta "${labelName}"?\n\nLe annotazioni esistenti rimarranno intatte.`)) {
         const form = document.createElement('form');
         form.method = 'POST';
         form.action = deleteUrl;
@@ -682,22 +697,13 @@ function confirmSoftDelete(labelName, deleteUrl) {
     }
 }
 
-// Gestione azioni in blocco
-function toggleAllLabels() {
-    const selectAll = document.getElementById('selectAll');
-    const checkboxes = document.querySelectorAll('.label-checkbox');
-    
-    checkboxes.forEach(checkbox => {
-        checkbox.checked = selectAll.checked;
-    });
-    
-    updateBulkActions();
-}
-
 function updateBulkActions() {
     const checkedBoxes = document.querySelectorAll('.label-checkbox:checked');
     const bulkActionBtn = document.getElementById('bulkActionBtn');
-    const bulkAction = document.getElementById('bulkAction');
+    if (!bulkActionBtn) {
+        updateSelectedCount();
+        return;
+    }
     
     if (checkedBoxes.length > 0) {
         bulkActionBtn.disabled = false;
@@ -710,7 +716,11 @@ function updateBulkActions() {
     // Aggiorna checkbox "seleziona tutto"
     const selectAll = document.getElementById('selectAll');
     const allCheckboxes = document.querySelectorAll('.label-checkbox');
-    selectAll.checked = allCheckboxes.length > 0 && checkedBoxes.length === allCheckboxes.length;
+    if (selectAll) {
+        selectAll.checked = allCheckboxes.length > 0 && checkedBoxes.length === allCheckboxes.length;
+    }
+
+    updateSelectedCount();
 }
 
 // Gestione cambio azione
@@ -744,7 +754,7 @@ document.getElementById('bulkActionForm')?.addEventListener('submit', function(e
     
     let message = '';
     if (action === 'delete') {
-        message = `Sei sicuro di voler eliminare ${checkedBoxes.length} etichette selezionate?`;
+        message = `Confermi la deprecazione di ${checkedBoxes.length} etichette selezionate?`;
     } else if (action === 'assign_category') {
         const categoryName = document.querySelector('select[name="category_id"] option:checked').text;
         message = `Sei sicuro di voler assegnare la categoria "${categoryName}" a ${checkedBoxes.length} etichette?`;

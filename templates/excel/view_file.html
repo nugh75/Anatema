@@ -1,30 +1,30 @@
 {% extends "base.html" %}
+{% from "_components/breadcrumb.html" import render_breadcrumb %}
+{% from "_components/page_header.html" import render_page_header %}
 
-{% block title %}{{ excel_file.original_filename }} -Anatema{% endblock %}
+{% block title %}{{ excel_file.original_filename }} - Anatema{% endblock %}
+
+{% block breadcrumb %}
+{{ render_breadcrumb([
+    ('Home', url_for('main.dashboard')),
+    ('Documenti', url_for('excel.list_files')),
+    (excel_file.original_filename, None)
+]) }}
+{% endblock %}
+
+{% block page_header %}
+{{ render_page_header(
+    title=excel_file.original_filename,
+    subtitle='Caricato da ' ~ excel_file.uploader.username ~ ' il ' ~ excel_file.uploaded_at.strftime('%d/%m/%Y alle %H:%M'),
+    icon='bi-file-earmark-excel',
+    step_num=1,
+    actions=[
+      {'label': 'Panoramica Domande', 'url': url_for('excel.questions_overview', file_id=excel_file.id), 'icon': 'bi-grid-3x3-gap', 'style': 'outline-primary'}
+    ]
+) }}
+{% endblock %}
 
 {% block content %}
-<div class="row mb-4">
-    <div class="col-12">
-        <div class="d-flex justify-content-between align-items-center">
-            <div>
-                <h2>
-                    <i class="bi bi-file-earmark-excel me-2"></i>{{ excel_file.original_filename }}
-                </h2>
-                <p class="text-muted mb-0">
-                    Caricato da {{ excel_file.uploader.username }} il {{ excel_file.uploaded_at.strftime('%d/%m/%Y alle %H:%M') }}
-                </p>
-            </div>
-            <div>
-                <a href="{{ url_for('excel.list_files') }}" class="btn btn-outline-secondary me-2">
-                    <i class="bi bi-arrow-left me-1"></i>Torna alla Lista
-                </a>
-                <a href="{{ url_for('excel.questions_overview', file_id=excel_file.id) }}" class="btn btn-outline-primary">
-                    <i class="bi bi-grid-3x3-gap me-1"></i>Panoramica Domande
-                </a>
-            </div>
-        </div>
-    </div>
-</div>
 
 <!-- Alert per etichette mancanti -->
 {% if available_labels_count == 0 %}
@@ -212,10 +212,10 @@
                         
                         <div class="col-lg-6 col-xl-4 mb-4">
                             <div class="card h-100 border-start border-4 {{ 'border-success' if question_progress == 100 else 'border-warning' if question_progress > 0 else 'border-secondary' }}">
-                                <div class="card-header py-2">
+                                <div class="card-header bg-light py-2">
                                     <div class="d-flex justify-content-between align-items-start">
                                         <div class="flex-grow-1">
-                                            <h6 class="mb-1 text-white">{{ question_name }}</h6>
+                                            <h6 class="mb-1">{{ question_name }}</h6>
                                             <div class="d-flex gap-2 mb-2">
                                                 <span class="badge bg-primary">{{ total_responses }} risposte</span>
                                                 {% if annotated_responses > 0 %}
@@ -242,7 +242,7 @@
                                              aria-valuemax="100">
                                         </div>
                                     </div>
-                                    <small class="text-white">Progresso: {{ "%.0f"|format(question_progress) }}%</small>
+                                    <small class="text-muted">Progresso: {{ "%.0f"|format(question_progress) }}%</small>
                                 </div>
                                 
                                 <div class="card-body py-2">
@@ -260,7 +260,7 @@
                                     {% endif %}
                                 </div>
                                 
-                                <div class="card-footer py-2">
+                                <div class="card-footer bg-light py-2">
                                     <div class="d-flex gap-1 justify-content-center">
                                         <a href="{{ url_for('excel.view_question', file_id=excel_file.id, question_name=question_name) }}" 
                                            class="btn btn-sm btn-primary">
@@ -312,11 +312,11 @@
                         {% for cell in cells.items %}
                         <div class="col-md-6 mb-4">
                             <div class="card h-100 border-start border-4 border-primary">
-                                <div class="card-header py-2">
+                                <div class="card-header bg-light py-2">
                                     <div class="d-flex justify-content-between align-items-center">
                                         <div>
-                                            <strong class="text-white">{{ cell.sheet_name }}:{{ cell.cell_reference }}</strong>
-                                            <small class="text-white ms-2">{{ cell.column_name }}</small>
+                                            <strong>{{ cell.sheet_name }}:{{ cell.cell_reference }}</strong>
+                                            <small class="text-muted ms-2">{{ cell.column_name }}</small>
                                         </div>
                                         <div class="d-flex gap-1">
                                             <a href="{{ url_for('annotation.annotate_cell', cell_id=cell.id) }}" 
@@ -356,12 +356,12 @@
                                     </div>
                                     {% endif %}
                                 </div>
-                                <div class="card-footer py-2">
+                                <div class="card-footer bg-light py-2">
                                     <div class="d-flex justify-content-between align-items-center">
-                                        <small class="text-white">
+                                        <small class="text-muted">
                                             Riga {{ cell.row_index + 1 }}, Colonna {{ cell.column_index + 1 }}
                                         </small>
-                                        <small class="text-white">
+                                        <small class="text-muted">
                                             {{ cell.text_content|length }} caratteri
                                         </small>
                                     </div>

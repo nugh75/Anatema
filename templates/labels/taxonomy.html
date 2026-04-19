@@ -1,0 +1,321 @@
+{% extends "base.html" %}
+{% from "_components/breadcrumb.html" import render_breadcrumb %}
+{% from "_components/page_header.html" import render_page_header %}
+
+{% block title %}Tassonomia - Anatema{% endblock %}
+
+{% block breadcrumb %}
+{{ render_breadcrumb([
+    ('Home', url_for('main.dashboard')),
+    ('Etichette', url_for('labels.list_labels')),
+    ('Tassonomia', None)
+]) }}
+{% endblock %}
+
+{% block page_header %}
+{{ render_page_header(
+    title='Razionalizza Tassonomia',
+    subtitle='Workflow admin: dry-run → approvazione → apply',
+    icon='bi-diagram-3',
+    step_num=3
+) }}
+{% endblock %}
+
+{% block content %}
+<div class="d-flex gap-2 mb-3">
+    <button id="rerunDryRunBtn" class="btn btn-outline-primary">
+        <i class="bi bi-arrow-clockwise me-1"></i>Esegui Dry-run
+    </button>
+    <button id="applySuggestedBtn" class="btn btn-warning">
+        <i class="bi bi-lightning me-1"></i>Apply Suggeriti
+    </button>
+</div>
+
+<div id="taxonomyAlert"></div>
+
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-body">
+                <h6 class="text-uppercase text-muted mb-2">Candidati Label</h6>
+                <h3 class="mb-0">{{ dry_run_report.summary.label_candidates }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-body">
+                <h6 class="text-uppercase text-muted mb-2">Candidati Category</h6>
+                <h3 class="mb-0">{{ dry_run_report.summary.category_candidates }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="bi bi-tags me-2"></i>Step 1 - Dry-run Merge Etichette
+                </h5>
+                <span class="badge bg-info">{{ dry_run_report.label_suggestions|length }} suggerimenti</span>
+            </div>
+            <div class="card-body p-0">
+                {% if dry_run_report.label_suggestions %}
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th class="ps-3">Applica</th>
+                                <th>Target</th>
+                                <th>Sorgenti</th>
+                                <th>Motivo</th>
+                                <th>Impatto</th>
+                                <th class="pe-3">Score</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in dry_run_report.label_suggestions %}
+                            <tr>
+                                <td class="ps-3">
+                                    <input type="checkbox"
+                                           class="form-check-input taxonomy-label-merge"
+                                           data-target-id="{{ item.target.id }}"
+                                           data-source-ids="{{ item.sources|map(attribute='id')|list|tojson }}">
+                                </td>
+                                <td><strong>{{ item.target.name }}</strong> <small class="text-muted">#{{ item.target.id }}</small></td>
+                                <td>
+                                    {% for src in item.sources %}
+                                    <span class="badge bg-secondary me-1">{{ src.name }}</span>
+                                    {% endfor %}
+                                </td>
+                                <td><small>{{ item.reason }}</small><br><code>{{ item.normalized_key }}</code></td>
+                                <td>
+                                    <small>
+                                        annotate: {{ item.impact_preview.moved_annotations }}<br>
+                                        dedup: {{ item.impact_preview.dedup_deleted }}
+                                    </small>
+                                </td>
+                                <td class="pe-3"><span class="badge bg-primary">{{ item.score }}</span></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="p-4 text-muted">Nessun merge etichette suggerito dal dry-run.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="bi bi-collection me-2"></i>Step 1 - Dry-run Merge Categorie
+                </h5>
+                <span class="badge bg-info">{{ dry_run_report.category_suggestions|length }} suggerimenti</span>
+            </div>
+            <div class="card-body p-0">
+                {% if dry_run_report.category_suggestions %}
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th class="ps-3">Applica</th>
+                                <th>Target</th>
+                                <th>Sorgenti</th>
+                                <th>Motivo</th>
+                                <th>Impatto</th>
+                                <th class="pe-3">Score</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in dry_run_report.category_suggestions %}
+                            <tr>
+                                <td class="ps-3">
+                                    <input type="checkbox"
+                                           class="form-check-input taxonomy-category-merge"
+                                           data-target-id="{{ item.target.id }}"
+                                           data-source-ids="{{ item.sources|map(attribute='id')|list|tojson }}">
+                                </td>
+                                <td><strong>{{ item.target.name }}</strong> <small class="text-muted">#{{ item.target.id }}</small></td>
+                                <td>
+                                    {% for src in item.sources %}
+                                    <span class="badge bg-secondary me-1">{{ src.name }}</span>
+                                    {% endfor %}
+                                </td>
+                                <td><small>{{ item.reason }}</small><br><code>{{ item.normalized_key }}</code></td>
+                                <td><small>labels migrate: {{ item.impact_preview.moved_labels }}</small></td>
+                                <td class="pe-3"><span class="badge bg-primary">{{ item.score }}</span></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="p-4 text-muted">Nessun merge categorie suggerito dal dry-run.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-12 text-end">
+        <button id="applySelectedBtn" class="btn btn-danger">
+            <i class="bi bi-check2-circle me-1"></i>Step 2 - Apply Selezionati
+        </button>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-journal-text me-2"></i>Audit Operazioni Recenti</h5>
+            </div>
+            <div class="card-body p-0">
+                {% if recent_audits %}
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0">
+                        <thead>
+                            <tr>
+                                <th class="ps-3">Quando</th>
+                                <th>Tipo</th>
+                                <th>Mode</th>
+                                <th>Source IDs</th>
+                                <th>Target</th>
+                                <th>Migrate</th>
+                                <th>Dedup</th>
+                                <th class="pe-3">Utente</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for audit in recent_audits %}
+                            <tr>
+                                <td class="ps-3"><small>{{ audit.performed_at.strftime('%d/%m/%Y %H:%M:%S') if audit.performed_at else '-' }}</small></td>
+                                <td>{{ audit.entity_type }}</td>
+                                <td><span class="badge {% if audit.mode == 'apply' %}bg-success{% else %}bg-secondary{% endif %}">{{ audit.mode }}</span></td>
+                                <td><small>{{ audit.get_source_ids()|join(', ') if audit.get_source_ids() else '-' }}</small></td>
+                                <td><small>{{ audit.target_id or '-' }}</small></td>
+                                <td><small>{{ audit.moved_annotations or 0 }}</small></td>
+                                <td><small>{{ audit.dedup_deleted or 0 }}</small></td>
+                                <td class="pe-3"><small>{{ audit.performer.username if audit.performer else '-' }}</small></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="p-4 text-muted">Nessuna operazione audit disponibile.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function getCsrfToken() {
+    return document.querySelector('meta[name=csrf-token]')?.getAttribute('content') ||
+           document.querySelector('input[name="csrf_token"]')?.value;
+}
+
+function setTaxonomyAlert(level, message) {
+    const box = document.getElementById('taxonomyAlert');
+    box.innerHTML = `
+        <div class="alert alert-${level} alert-dismissible fade show" role="alert">
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    `;
+}
+
+function collectSelectedMerges(selector) {
+    return Array.from(document.querySelectorAll(selector + ':checked')).map((el) => ({
+        target_id: Number(el.dataset.targetId),
+        source_ids: JSON.parse(el.dataset.sourceIds || '[]').map((v) => Number(v))
+    })).filter((x) => x.target_id && x.source_ids.length > 0);
+}
+
+async function applyTaxonomy(payload) {
+    const response = await fetch('{{ url_for("labels.taxonomy_apply") }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken()
+        },
+        body: JSON.stringify(payload)
+    });
+    return await response.json();
+}
+
+document.getElementById('rerunDryRunBtn')?.addEventListener('click', async () => {
+    try {
+        const response = await fetch('{{ url_for("labels.taxonomy_dry_run") }}?write_audit=true');
+        const result = await response.json();
+        if (!result.success) {
+            setTaxonomyAlert('danger', result.error || 'Dry-run fallito');
+            return;
+        }
+        setTaxonomyAlert('info', 'Dry-run completato. Aggiorno la pagina.');
+        window.setTimeout(() => window.location.reload(), 500);
+    } catch (error) {
+        setTaxonomyAlert('danger', 'Errore durante il dry-run: ' + error.message);
+    }
+});
+
+document.getElementById('applySelectedBtn')?.addEventListener('click', async () => {
+    const labelMerges = collectSelectedMerges('.taxonomy-label-merge');
+    const categoryMerges = collectSelectedMerges('.taxonomy-category-merge');
+
+    if (!labelMerges.length && !categoryMerges.length) {
+        setTaxonomyAlert('warning', 'Seleziona almeno un merge da applicare.');
+        return;
+    }
+
+    if (!confirm('Confermi apply del piano selezionato? Le sorgenti verranno deprecate con audit.')) {
+        return;
+    }
+
+    try {
+        const result = await applyTaxonomy({
+            label_merges: labelMerges,
+            category_merges: categoryMerges
+        });
+        if (!result.success) {
+            setTaxonomyAlert('danger', result.error || 'Apply non riuscito');
+            return;
+        }
+        setTaxonomyAlert('success', 'Apply completato con successo. Aggiorno la pagina.');
+        window.setTimeout(() => window.location.reload(), 800);
+    } catch (error) {
+        setTaxonomyAlert('danger', 'Errore durante apply: ' + error.message);
+    }
+});
+
+document.getElementById('applySuggestedBtn')?.addEventListener('click', async () => {
+    if (!confirm('Confermi apply di tutti i suggerimenti dry-run correnti?')) {
+        return;
+    }
+
+    try {
+        const result = await applyTaxonomy({ apply_suggested: true });
+        if (!result.success) {
+            setTaxonomyAlert('danger', result.error || 'Apply suggeriti non riuscito');
+            return;
+        }
+        setTaxonomyAlert('success', 'Apply suggeriti completato. Aggiorno la pagina.');
+        window.setTimeout(() => window.location.reload(), 800);
+    } catch (error) {
+        setTaxonomyAlert('danger', 'Errore durante apply suggeriti: ' + error.message);
+    }
+});
+</script>
+{% endblock %}
